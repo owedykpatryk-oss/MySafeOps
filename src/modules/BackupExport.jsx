@@ -19,6 +19,7 @@ import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import InlineAlert from "../components/InlineAlert";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const ss = ms;
@@ -26,6 +27,7 @@ const ss = ms;
 export default function BackupExport() {
   const { caps, orgId, trialStatus, billing, isPlatformOwner } = useApp();
   const { supabase, user, ready } = useSupabaseAuth();
+  const { pushToast } = useToast();
   const [msg, setMsg] = useState("");
   const [cloudBusy, setCloudBusy] = useState(false);
   const [d1Busy, setD1Busy] = useState(false);
@@ -84,7 +86,11 @@ export default function BackupExport() {
     URL.revokeObjectURL(a.href);
     const detail = `${Object.keys(bundle.keys).length} keys${includeGeocodeCache ? " + geocode cache" : ""}`;
     pushAudit({ action: "backup_export", entity: "all", detail });
-    setMsg(bundle.skippedUnknownKeyCount ? `Backup downloaded. ${bundle.skippedUnknownKeyCount} unrecognised storage keys were excluded; review their ownership before relying on this backup.` : "Backup downloaded.");
+    const downloadedMsg = bundle.skippedUnknownKeyCount
+      ? `Backup downloaded. ${bundle.skippedUnknownKeyCount} unrecognised storage keys were excluded; review their ownership before relying on this backup.`
+      : "Backup downloaded.";
+    setMsg(downloadedMsg);
+    pushToast({ type: "success", title: "Backup downloaded", message: downloadedMsg });
   };
 
   const onFile = (e) => {
@@ -103,7 +109,9 @@ export default function BackupExport() {
         const r = restoreBackupBundle(bundle, { merge: false });
         if (!r.skipped) {
           pushAudit({ action: "backup_import", entity: "all", detail: `${r.applied} keys` });
-          setMsg(`Restored ${r.applied} keys. Reload recommended.`);
+          const restoredMsg = `Restored ${r.applied} keys. Reload recommended.`;
+          setMsg(restoredMsg);
+          pushToast({ type: "success", title: "Backup restored", message: restoredMsg });
         } else setMsg("Import cancelled.");
       } catch (err) {
         setMsg(err.message || "Invalid JSON");
@@ -128,7 +136,9 @@ export default function BackupExport() {
         const r = restoreBackupBundle(bundle, { merge: true });
         if (!r.skipped) {
           pushAudit({ action: "backup_merge", entity: "all", detail: `${r.applied} keys` });
-          setMsg(`Merged ${r.applied} keys.`);
+          const mergedMsg = `Merged ${r.applied} keys.`;
+          setMsg(mergedMsg);
+          pushToast({ type: "success", title: "Backup merged", message: mergedMsg });
         } else setMsg("Merge cancelled.");
       } catch (err) {
         setMsg(err.message || "Invalid JSON");
@@ -164,7 +174,11 @@ export default function BackupExport() {
       const slug = await syncOrgSlugIfNeeded(supabase);
       await uploadBackupToSupabase(supabase, slug, { bundle });
       pushAudit({ action: "backup_cloud_upload", entity: "all", detail: slug });
-      setMsg(bundle.skippedUnknownKeyCount ? `Cloud backup updated. ${bundle.skippedUnknownKeyCount} unrecognised storage keys were excluded; review their ownership before relying on this backup.` : "Cloud backup updated.");
+      const cloudMsg = bundle.skippedUnknownKeyCount
+        ? `Cloud backup updated. ${bundle.skippedUnknownKeyCount} unrecognised storage keys were excluded; review their ownership before relying on this backup.`
+        : "Cloud backup updated.";
+      setMsg(cloudMsg);
+      pushToast({ type: "success", title: "Cloud backup updated", message: cloudMsg });
       refreshCloudMeta();
     } catch (e) {
       setMsg(formatCloudSyncError(e));
@@ -230,11 +244,15 @@ export default function BackupExport() {
           entity: "all",
           detail: `${r.applied} keys`,
         });
-        setMsg(
-          merge
-            ? `Merged ${r.applied} keys from cloud.`
-            : `Restored ${r.applied} keys from cloud. Reload recommended.`
-        );
+        const fromCloudMsg = merge
+          ? `Merged ${r.applied} keys from cloud.`
+          : `Restored ${r.applied} keys from cloud. Reload recommended.`;
+        setMsg(fromCloudMsg);
+        pushToast({
+          type: "success",
+          title: merge ? "Cloud backup merged" : "Cloud backup restored",
+          message: fromCloudMsg,
+        });
       } else setMsg("Restore cancelled.");
     } catch (e) {
       setMsg(formatCloudSyncError(e));
@@ -391,7 +409,7 @@ export default function BackupExport() {
           </>
         )}
       </div>
-      {msg && <p style={{ marginTop: 16, fontSize: 13 }}>{msg}</p>}
+      {msg && <p role="status" aria-live="polite" style={{ marginTop: 16, fontSize: 13 }}>{msg}</p>}
     </div>
   );
 }

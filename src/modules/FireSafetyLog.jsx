@@ -18,6 +18,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `fire_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -29,6 +30,7 @@ const TYPES = ["Fire extinguisher", "Fire alarm test", "Emergency lighting", "As
 
 function Form({ item, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -43,6 +45,7 @@ function Form({ item, onSave, onClose }) {
       }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const canSave = Boolean(String(form.location || "").trim() && String(form.checkDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -57,7 +60,7 @@ function Form({ item, onSave, onClose }) {
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-location">{t("location")}</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="fire-safety-location" />
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Ground floor – north stair" id="fire-safety-location" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-check-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)}  id="fire-safety-check-date" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
@@ -65,16 +68,16 @@ function Form({ item, onSave, onClose }) {
           Satisfactory
         </label>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-checked-by">Checked by</label>
-        <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)}  id="fire-safety-checked-by" />
+        <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)} placeholder="Name and role" id="fire-safety-checked-by" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-notes">{t("notes")} / actions</label>
         <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="fire-safety-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const check = validateRequiredFields(form, ["location","checkDate"], { location: "Location", checkDate: "Check date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(form);
           }}>
             {t("save")}
@@ -141,7 +144,7 @@ export default function FireSafetyLog() {
         </div>}
       />
 
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="fire safety log" />
 
       <RegisterModuleShell
         moduleId="fire"

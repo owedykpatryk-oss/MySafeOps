@@ -12,6 +12,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import { exportCsv } from "../utils/exportCsv";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useToast } from "../context/ToastContext";
 import { todayLocalISO } from "../utils/localDate";
 import { assessOrzCard, findOrzCard, listOrzBranze, PL_ORZ_CARDS } from "../utils/plOrzLibrary";
 import { printOrzCard } from "../utils/plOrzPrintHtml";
@@ -94,9 +95,11 @@ function LibraryPicker({ onPick, onClose }) {
 }
 
 function CardForm({ item, onSave, onClose }) {
+  const { pushToast } = useToast();
   const [form, setForm] = useState(() => ({ ...item }));
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const assessed = assessOrzCard(form);
+  const canSave = Boolean(String(form.dataOceny || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -148,11 +151,12 @@ function CardForm({ item, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>Anuluj</button>
           <button
             type="button"
-            style={ss.btnP}
+            disabled={!canSave}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
             onClick={() => {
               const check = validateRequiredFields(form, ["dataOceny"], { dataOceny: "Data oceny" });
               if (!check.ok) {
-                window.alert(check.message);
+                pushToast({ type: "warn", title: "Pola wymagane", message: check.message });
                 return;
               }
               onSave(form);

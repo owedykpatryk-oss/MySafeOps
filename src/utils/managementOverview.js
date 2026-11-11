@@ -169,6 +169,51 @@ export function dateOnly(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/** Best-effort programme start for management diary / planner views. */
+export function resolveManagementJobStart(job = {}) {
+  const project = job.project;
+  const candidates = [
+    job.start,
+    job.timelineStart,
+    project?.timelineStart,
+    job.plannedStart,
+    project?.plannedStart,
+  ];
+  for (const value of candidates) {
+    if (!value) continue;
+    const d = dateOnly(value);
+    if (d) return isoDate(d);
+  }
+  return "";
+}
+
+/** Best-effort programme end; falls back to start when end is missing. */
+export function resolveManagementJobEnd(job = {}) {
+  const project = job.project;
+  const start = resolveManagementJobStart(job);
+  const candidates = [job.end, job.timelineEnd, project?.timelineEnd, start];
+  for (const value of candidates) {
+    if (!value) continue;
+    const d = dateOnly(value);
+    if (d) return isoDate(d);
+  }
+  return start || "";
+}
+
+function jobCountsAsUpcoming(job, today, inNinetyDays) {
+  if (job.status === "cancelled" || job.status === "completed") return false;
+  const start = dateOnly(job.start);
+  const end = dateOnly(job.end) || start;
+  if (!start && !end) return true;
+  if (start && start > inNinetyDays) return false;
+  const effectiveEnd = end || start;
+  if (effectiveEnd && effectiveEnd < today) return false;
+  if (start && start >= today && start <= inNinetyDays) return true;
+  if (start && start < today && effectiveEnd && effectiveEnd >= today) return true;
+  if (!start && effectiveEnd && effectiveEnd >= today) return true;
+  return false;
+}
+
 export function isoDate(date) {
   const d = new Date(date);
   const y = d.getFullYear();
@@ -269,14 +314,24 @@ export function buildManagementDiary(jobs = [], teams = [], anchor = new Date())
   const today = dateOnly(isoDate(anchor)) || dateOnly(isoDate(new Date()));
   const inNinetyDays = addDays(today, 90);
   const fourWeeksAgo = addDays(today, -28);
-  const list = Array.isArray(jobs) ? jobs : [];
+  const list = Array.isArray(jobs)
+    ? jobs.map((job) => ({
+        ...job,
+        start: resolveManagementJobStart(job),
+        end: resolveManagementJobEnd(job),
+      }))
+    : [];
 
   const scheduled = list
-    .filter((job) => {
-      const start = dateOnly(job.start);
-      return start && start >= today && start <= inNinetyDays && job.status !== "cancelled";
-    })
-    .sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+    .filter((job) => jobCountsAsUpcoming(job, today, inNinetyDays))
+    .sort((a, b) => {
+      const aStart = dateOnly(a.start);
+      const bStart = dateOnly(b.start);
+      if (!aStart && !bStart) return String(a.name || "").localeCompare(String(b.name || ""));
+      if (!aStart) return 1;
+      if (!bStart) return -1;
+      return aStart - bStart;
+    });
 
   const completed = list
     .filter((job) => {

@@ -390,7 +390,7 @@ export default function InviteUsers() {
       <PageHero
         badgeText="👥"
         title="Invite users"
-        lead="Invite teammates into your organisation. Accepted invites join the same org automatically."
+        lead="Invite teammates into your organisation. They open the invite link and set their own password when joining."
       />
       {readOnly ? (
         <div style={{ marginBottom: 16 }}>
@@ -414,7 +414,13 @@ export default function InviteUsers() {
               <span style={{ ...ss.chip, background: "#fee2e2", borderColor: "#fecaca", color: "#991b1b" }}>failed {deliveryCounts.failed}</span>
             </div>
             <label style={ss.lbl}>Email</label>
-            <input type="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              type="email"
+              style={ss.inp}
+              placeholder="Enter email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
             <label style={{ ...ss.lbl, marginTop: 10 }}>Role</label>
             <select style={ss.inp} value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="operative">Operative</option>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { pushAudit } from "../utils/auditLog";
+import { useToast } from "../context/ToastContext";
 import { ms } from "../utils/moduleStyles";
 import { countryOperationalStorageKey, loadOrgScoped as load, ORG_CHANGED_EVENT, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
@@ -44,6 +45,7 @@ export function templatePayloadFromDocument(doc, type) {
 
 export default function DocumentTemplates() {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [templateStore, setTemplateStore] = useState(readTemplates);
   const [name, setName] = useState("");
   const [type, setType] = useState("rams");
@@ -74,25 +76,29 @@ export default function DocumentTemplates() {
   };
 
   const capture = () => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      pushToast({ type: "warn", title: "Template name required", message: "Enter a template name before saving." });
+      return;
+    }
     let payload = null;
     if (type === "rams") {
       const doc = rams.find((d) => d.id === sourceId);
       if (!doc) {
-        alert("Select a RAMS document");
+        pushToast({ type: "warn", title: "Select a document", message: "Choose a RAMS document to save as a template." });
         return;
       }
       payload = templatePayloadFromDocument(doc, type);
     } else {
       const doc = methodStmts.find((d) => d.id === sourceId);
       if (!doc) {
-        alert("Select a method statement");
+        pushToast({ type: "warn", title: "Select a document", message: "Choose a method statement to save as a template." });
         return;
       }
       payload = templatePayloadFromDocument(doc, type);
     }
     const next = [{ id: genId(), name: name.trim(), type, payload, createdAt: new Date().toISOString() }, ...load(TEMPLATE_KEY, [])];
     if (!persistTemplates(next)) return;
+    pushToast({ type: "success", title: "Template saved", message: `"${name.trim()}" is ready to clone.` });
     setName("");
     pushAudit({ action: "template_save", entity: type, detail: name.trim() });
   };
@@ -196,7 +202,12 @@ export default function DocumentTemplates() {
             </option>
           ))}
         </select>
-        <button type="button" style={{ ...ss.btnP, marginTop: 12 }} onClick={capture}>
+        <button
+          type="button"
+          style={{ ...ss.btnP, marginTop: 12, opacity: name.trim() && sourceId ? 1 : 0.55 }}
+          disabled={!name.trim() || !sourceId}
+          onClick={capture}
+        >
           {t("save")}
         </button>
       </div>

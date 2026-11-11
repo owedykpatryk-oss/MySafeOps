@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ProjectSitePreviewMap from "./ProjectSitePreviewMap";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { prefetchView } from "../viewPrefetch";
+import { notifyAppToast } from "../utils/htmlEscape.js";
 import { collectProjectDashboard, fmtProjectDay, fmtProjectWhen, healthTone } from "../utils/projectDashboard";
 import { assessComplianceNotification, getCompliancePackContent } from "../config/compliancePackContent";
 import { f10StatusLabel } from "../utils/cdmF10Assessment";
@@ -201,8 +203,17 @@ export default function ProjectDashboard({
 
   const go = (viewId, action, extra = {}) => {
     if (!project?.id) return;
+    prefetchView(viewId);
     setWorkspaceNavTarget({ viewId, projectId: project.id, action, ...extra });
     openWorkspaceView({ viewId });
+    if (viewId === "project-drawings") {
+      notifyAppToast({
+        type: "info",
+        title: "Opening drawings",
+        message: "Loading site plans and drawing tools…",
+        durationMs: 2500,
+      });
+    }
     if (!embedded) onClose?.();
   };
 
@@ -432,7 +443,13 @@ export default function ProjectDashboard({
             <>
               <p className="app-project-dashboard__next-eyebrow">{hub.doThisNow || "Do this now"}</p>
               <p className="app-project-dashboard__next-label">{nextAction.label}</p>
-              <button type="button" className="app-project-dashboard__next-cta" onClick={runNextAction}>
+              <button
+                type="button"
+                className="app-project-dashboard__next-cta"
+                onMouseEnter={() => nextAction?.viewId && prefetchView(nextAction.viewId)}
+                onFocus={() => nextAction?.viewId && prefetchView(nextAction.viewId)}
+                onClick={runNextAction}
+              >
                 Go →
               </button>
             </>

@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `mewp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -46,17 +48,18 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.equipmentRef || "").trim() && String(form.checkDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit MEWP check" : "MEWP pre-use check"}</h2>
         <label style={ss.lbl} htmlFor="mewp-equipment-ref">Equipment ref / plant no.</label>
-        <input style={ss.inp} value={form.equipmentRef} onChange={(e) => set("equipmentRef", e.target.value)}  id="mewp-equipment-ref" />
+        <input style={ss.inp} value={form.equipmentRef} onChange={(e) => set("equipmentRef", e.target.value)} placeholder="Plant no."  id="mewp-equipment-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-type">Type (scissor / boom / etc.)</label>
         <input style={ss.inp} value={form.mewpType} onChange={(e) => set("mewpType", e.target.value)}  id="mewp-type" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-operator-name">Operator</label>
-        <input style={ss.inp} value={form.operatorName} onChange={(e) => set("operatorName", e.target.value)}  id="mewp-operator-name" />
+        <input style={ss.inp} value={form.operatorName} onChange={(e) => set("operatorName", e.target.value)} placeholder="Operator"  id="mewp-operator-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-licence-ref">Licence / IPAF card ref</label>
         <input style={ss.inp} value={form.licenceRef} onChange={(e) => set("licenceRef", e.target.value)}  id="mewp-licence-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-check-date">{t("date")}</label>
@@ -82,10 +85,10 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["equipmentRef","checkDate"], { equipmentRef: "Equipment ref", checkDate: "Check date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}

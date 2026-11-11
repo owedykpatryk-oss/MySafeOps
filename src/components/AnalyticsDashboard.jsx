@@ -159,7 +159,7 @@ function BarChart({ data, height = 100, color = "#0d9488" }) {
           <div
             key={`l-${d.label || i}`}
             className="app-dashboard-bar-label"
-            style={{ flex: 1, textAlign: "center", fontSize: 10, color: "var(--color-text-tertiary,#94a3b8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            style={{ flex: 1, textAlign: "center", fontSize: 10, color: "var(--color-text-tertiary,#94a3b8)" }}
             title={d.label}
           >
             {d.label}
@@ -258,7 +258,7 @@ function ExpiryRow({ name, role, certType, expiryDate }) {
         {(name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
       </div>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+        <div title={name || undefined} style={{ fontSize:13, fontWeight:500, overflow:"hidden", display:"-webkit-box", WebkitBoxOrient:"vertical", WebkitLineClamp:2, whiteSpace:"normal", overflowWrap:"anywhere", lineHeight:1.3 }}>{name}</div>
         <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>{certType}{role ? ` · ${role}` : ""}</div>
       </div>
       <div style={{ textAlign:"right", flexShrink:0 }}>
@@ -454,7 +454,7 @@ export default function AnalyticsDashboard() {
     });
     const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
     const hoursChartData = Object.entries(hoursByProject)
-      .map(([id, h]) => ({ label: (projectMap[id] || id || "Unknown").slice(0, 10), value: Math.round(h) }))
+      .map(([id, h]) => ({ label: projectMap[id] || id || "Unknown", value: Math.round(h) }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
     return { hoursChartData, hoursByProject };
@@ -491,7 +491,7 @@ export default function AnalyticsDashboard() {
       inductionsBySite[key] = (inductionsBySite[key] || 0) + 1;
     });
     return Object.entries(inductionsBySite)
-      .map(([l, v]) => ({ label: l.slice(0, 10), value: v }))
+      .map(([l, v]) => ({ label: l, value: v }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
   }, [inductions]);

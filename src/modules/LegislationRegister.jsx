@@ -15,8 +15,10 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { safeHttpUrl } from "../utils/safeUrl";
+import { useToast } from "../context/ToastContext";
 
 const KEY = "legislation_register";
 const genId = () => `leg_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -24,6 +26,7 @@ const ss = ms;
 
 function Form({ item, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -42,6 +45,7 @@ function Form({ item, onSave, onClose }) {
       }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const canSave = Boolean(String(form.shortName || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -67,7 +71,21 @@ function Form({ item, onSave, onClose }) {
         <textarea style={{ ...ss.inp, minHeight: 40 }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="legislation-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
-          <button type="button" style={ss.btnP} onClick={() => onSave(form)}>Save</button>
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
+              const check = validateRequiredFields(form, ["shortName"], { shortName: "Short name" });
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
+              onSave(form);
+            }}
+          >
+            Save
+          </button>
         </div>
       </div>
     </ModuleOverlay>
@@ -76,6 +94,7 @@ function Form({ item, onSave, onClose }) {
 
 export default function LegislationRegister() {
   const { t, marketId } = useWorkspaceT();
+  const { pushToast } = useToast();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [modal, setModal] = useState(null);
@@ -110,11 +129,20 @@ export default function LegislationRegister() {
     const existingRefs = new Set(items.map((i) => i.refId || i.shortName));
     const toAdd = seedLegislationRegisterForMarket(marketId).filter((s) => !existingRefs.has(s.refId));
     if (!toAdd.length) {
-      window.alert(`${marketId.toUpperCase()} legislation library already loaded.`);
+      pushToast({
+        type: "info",
+        title: "Already loaded",
+        message: `${marketId.toUpperCase()} legislation library already loaded.`,
+      });
       return;
     }
     persist([...items, ...toAdd]);
     pushAudit({ action: "seed", entityType: "legislation_register", entityId: "uk_library" });
+    pushToast({
+      type: "success",
+      title: "Library loaded",
+      message: `Added ${toAdd.length} legislation ${toAdd.length === 1 ? "entry" : "entries"}.`,
+    });
   };
 
   return (
@@ -129,7 +157,7 @@ export default function LegislationRegister() {
           </div>
         }
       />
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="legislation register" />
       <RegisterModuleShell
         moduleId="legislation"
         smartContext={{ items: liveItems }}

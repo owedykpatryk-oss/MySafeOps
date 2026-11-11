@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `nv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -48,6 +50,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.activityOrTool || "").trim() && String(form.logDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -59,7 +62,7 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="hav">Hand-arm vibration (tool time)</option>
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-activity-or-tool">Activity / equipment</label>
-        <input style={ss.inp} value={form.activityOrTool} onChange={(e) => set("activityOrTool", e.target.value)}  id="noise-vibration-activity-or-tool" />
+        <input style={ss.inp} value={form.activityOrTool} onChange={(e) => set("activityOrTool", e.target.value)} placeholder="Activity or tool"  id="noise-vibration-activity-or-tool" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="noise-vibration-location" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-project-id">{t("project")}</label>
@@ -96,10 +99,10 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["activityOrTool","logDate"], { activityOrTool: "Activity / equipment", logDate: "Date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}

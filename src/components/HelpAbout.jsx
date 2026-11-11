@@ -201,6 +201,8 @@ export default function HelpAbout() {
   const [selectedGuideId, setSelectedGuideId] = useState(GUIDED_HELP_TASKS[0].id);
   const [completedSteps, setCompletedSteps] = useState(() => new Set());
   const [showAllModules, setShowAllModules] = useState(false);
+  const [faqOpenId, setFaqOpenId] = useState(null);
+  const [helpDetailsOpenId, setHelpDetailsOpenId] = useState(null);
   const marketId = getOrgMarketId();
   const ramsLabel = getRamsShortLabel(marketId);
   const activePackId = getAppliedIndustryPackId() || "generalContractor";
@@ -362,7 +364,14 @@ export default function HelpAbout() {
               <ol>{profileSummary.steps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}</ol>
               <div className="help-workspace-card__actions"><button type="button" onClick={() => openWorkspaceView({ viewId: "projects" })}>Open Project Hub</button><button type="button" onClick={() => openWorkspaceView({ viewId: "rams" })}>Open {ramsLabel}</button></div>
             </div>
-            <details className="help-profile-details"><summary>Compare all workspace profiles<ChevronRight size={15} /></summary><ProfileCatalogue activePackId={activePackId} /></details>
+            <details
+              className="help-profile-details"
+              open={helpDetailsOpenId === "profiles"}
+              onToggle={(event) => setHelpDetailsOpenId(event.currentTarget.open ? "profiles" : null)}
+            >
+              <summary>Compare all workspace profiles<ChevronRight size={15} /></summary>
+              <ProfileCatalogue activePackId={activePackId} />
+            </details>
             <div className="help-app-map">
               <div><span className="help-section-kicker">How the app fits together</span><h3>{APP_LAYOUT.title}</h3><p>{APP_LAYOUT.lead}</p></div>
               <ol>{APP_LAYOUT.layers.map((layer, index) => <li key={layer.name}><span>{index + 1}</span><div><strong>{layer.name}</strong><p>{layer.body}</p></div></li>)}</ol>
@@ -392,15 +401,45 @@ export default function HelpAbout() {
             <div className="help-settings-grid">
               {WORKSPACE_SETTINGS_TABS.filter((tab) => SETTINGS_TAB_HELP[tab.id] && (tab.id !== "developer" || SHOW_DEV_HINTS)).map((tab) => <button type="button" key={tab.id} onClick={() => openWorkspaceSettings({ tab: tab.id })}><span><Settings2 size={16} /></span><strong>{tab.label}</strong><p>{SETTINGS_TAB_HELP[tab.id]}</p><ArrowRight size={14} /></button>)}
             </div>
-            <details className="help-info-details"><summary>{BILLING_TRIAL_GUIDE.title}<ChevronRight size={15} /></summary><ul>{BILLING_TRIAL_GUIDE.points.map((point) => <li key={point}>{point}</li>)}</ul><button type="button" onClick={() => openWorkspaceSettings({ tab: "billing" })}>Open Billing</button></details>
+            <details
+              className="help-info-details"
+              open={helpDetailsOpenId === "billing"}
+              onToggle={(event) => setHelpDetailsOpenId(event.currentTarget.open ? "billing" : null)}
+            >
+              <summary>{BILLING_TRIAL_GUIDE.title}<ChevronRight size={15} /></summary>
+              <ul>{BILLING_TRIAL_GUIDE.points.map((point) => <li key={point}>{point}</li>)}</ul>
+              <button type="button" onClick={() => openWorkspaceSettings({ tab: "billing" })}>Open Billing</button>
+            </details>
           </section>
 
           <section className="help-section" id="help-questions">
             <div className="help-section__head"><div><span className="help-section-kicker">Troubleshooting</span><h2>Common questions</h2><p>Short answers to the issues people hit most often.</p></div></div>
             <div className="help-faq-list">
-              {HELP_FAQ.map((item, index) => <details key={item.q} name="help-faq" open={index === 0}><summary><span>{String(index + 1).padStart(2, "0")}</span>{item.q}<ChevronRight size={16} /></summary><p>{item.a}</p></details>)}
+              {HELP_FAQ.map((item, index) => (
+                <details
+                  key={item.q}
+                  open={faqOpenId === item.q}
+                  onToggle={(event) => {
+                    setFaqOpenId(event.currentTarget.open ? item.q : null);
+                  }}
+                >
+                  <summary>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    {item.q}
+                    <ChevronRight size={16} />
+                  </summary>
+                  <p>{item.a}</p>
+                </details>
+              ))}
             </div>
-            <details className="help-info-details"><summary>Plain-English glossary<ChevronRight size={15} /></summary><dl className="help-glossary">{GLOSSARY.map((entry) => <div key={entry.term}><dt>{entry.term}</dt><dd>{entry.def}</dd></div>)}</dl></details>
+            <details
+              className="help-info-details"
+              open={helpDetailsOpenId === "glossary"}
+              onToggle={(event) => setHelpDetailsOpenId(event.currentTarget.open ? "glossary" : null)}
+            >
+              <summary>Plain-English glossary<ChevronRight size={15} /></summary>
+              <dl className="help-glossary">{GLOSSARY.map((entry) => <div key={entry.term}><dt>{entry.term}</dt><dd>{entry.def}</dd></div>)}</dl>
+            </details>
           </section>
 
           <section className="help-section" id="help-modules">

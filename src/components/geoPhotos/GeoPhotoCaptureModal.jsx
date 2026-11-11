@@ -515,6 +515,11 @@ export default function GeoPhotoCaptureModal({
         autoProjectHint,
       }, scope);
       setStep("location");
+      pushToast({
+        type: "info",
+        title: "Photo captured",
+        message: "Complete location and details, then tap Save to add it to Geo-Photos.",
+      });
     } catch {
       if (isCurrent()) setPhotoError(photoReadErrorMessage(file));
     } finally {
@@ -601,7 +606,9 @@ export default function GeoPhotoCaptureModal({
     try {
       await persistRow(row, takeAnother);
     } catch (err) {
-      setSaveError(err?.message || "Photo could not be saved. Your draft is still here — try again.");
+      const message = err?.message || "Photo could not be saved. Your draft is still here — try again.";
+      setSaveError(message);
+      pushToast({ type: "error", title: "Photo not saved", message });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -640,10 +647,13 @@ export default function GeoPhotoCaptureModal({
     const saved = await onSave(row, { takeAnother });
     if (saved === false) {
       // Keep the draft (and the photo) so a blocked save never loses field work.
-      setSaveError("Photo could not be saved. Check the selected project and available storage, then try again. Your draft is still here.");
+      const blockedMsg = "Photo could not be saved. Check the selected project and available storage, then try again. Your draft is still here.";
+      setSaveError(blockedMsg);
+      pushToast({ type: "error", title: "Photo not saved", message: blockedMsg });
       setStep("details");
       return;
     }
+    pushToast({ type: "success", title: "Photo saved", message: "Geo-photo added to your library." });
     await clearCaptureDraft(scope);
     if (scope !== countryOperationalStorageKey(CAPTURE_DRAFT_KEY) || !wasOpenRef.current || row.id !== captureIdRef.current) return;
     captureIdRef.current = newGeoPhotoId();

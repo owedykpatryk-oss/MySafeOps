@@ -21,6 +21,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -70,6 +71,7 @@ function defaultFoodFields() {
 
 function Form({ item, projects, liveLotos, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const food = orgHasFoodIndustrialPack();
   const [form, setForm] = useState(() => {
     const base =
@@ -108,16 +110,24 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
       { location: "Location", workDescription: "Work description" }
     );
     if (!check.ok) {
-      window.alert(check.message);
+      pushToast({ type: "warn", title: "Required fields", message: check.message });
       return;
     }
     if (food) {
       if (form.status === "completed" && form.qcSignoffRequired && !form.qcSignedOffAt) {
-        alert("QC sign-off is required before closing this hot work record. Enter who signed off and mark the time.");
+        pushToast({
+          type: "warn",
+          title: "QC sign-off required",
+          message: "Enter who signed off and mark the time before closing this hot work record.",
+        });
         return;
       }
       if (form.status === "active" && !form.linkedLotoId && !String(form.noLotoJustification || "").trim()) {
-        alert("Link a live LOTO or enter a brief justification when hot work proceeds without LOTO on file.");
+        pushToast({
+          type: "warn",
+          title: "LOTO link required",
+          message: "Link a live LOTO or enter a brief justification when hot work proceeds without LOTO on file.",
+        });
         return;
       }
     }
@@ -127,7 +137,7 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
   const stampQcSignoff = () => {
     const who = String(form.qcSignedOffBy || "").trim();
     if (!who) {
-      alert("Enter the name or initials of whoever is signing off.");
+      pushToast({ type: "warn", title: "Sign-off name", message: "Enter the name or initials of whoever is signing off." });
       return;
     }
     set("qcSignedOffAt", Date.now());

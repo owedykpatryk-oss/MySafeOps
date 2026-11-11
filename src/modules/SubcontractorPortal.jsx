@@ -23,6 +23,7 @@ export function PublicSubcontractorView({ token }) {
   const [certName, setCertName] = useState("");
   const [certData, setCertData] = useState(null);
   const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const portals = load("subcontractor_portals", []);
   const portal = safeToken ? portals.find((p) => p.token === safeToken && p.active) : null;
@@ -45,7 +46,11 @@ export function PublicSubcontractorView({ token }) {
   }
 
   const submit = () => {
-    if (!company.trim()) return;
+    if (!company.trim()) {
+      setSubmitError("Please enter your company name before submitting.");
+      return;
+    }
+    setSubmitError("");
     const subs = load("subcontractor_submissions", []);
     const row = {
       id: genId(),
@@ -105,17 +110,46 @@ export function PublicSubcontractorView({ token }) {
       <p style={{ fontSize: 13, color: "#64748b" }}>{portal.instructions || "Submit your company details, RAMS summary, and optional competency certificate."}</p>
       <div style={ss.card}>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, marginBottom: 4 }}>Company name *</label>
-        <input style={ss.inp} value={company} onChange={(e) => setCompany(e.target.value)} />
+        <input
+          style={ss.inp}
+          value={company}
+          onChange={(e) => {
+            setCompany(e.target.value);
+            if (submitError) setSubmitError("");
+          }}
+          placeholder="e.g. Acme Brickwork Ltd"
+          aria-required="true"
+        />
         <label style={{ display: "block", fontSize: 12, marginTop: 10 }}>Contact (email / phone)</label>
-        <input style={ss.inp} value={contact} onChange={(e) => setContact(e.target.value)} />
+        <input
+          style={ss.inp}
+          value={contact}
+          onChange={(e) => setContact(e.target.value)}
+          placeholder="name@company.com or 07…"
+        />
         <label style={{ display: "block", fontSize: 12, marginTop: 10 }}>RAMS / scope summary</label>
-        <textarea style={{ ...ss.inp, minHeight: 100, resize: "vertical" }} value={ramsSummary} onChange={(e) => setRamsSummary(e.target.value)} />
+        <textarea
+          style={{ ...ss.inp, minHeight: 100, resize: "vertical" }}
+          value={ramsSummary}
+          onChange={(e) => setRamsSummary(e.target.value)}
+          placeholder="Brief summary of the works / RAMS scope…"
+        />
         <label style={{ display: "block", fontSize: 12, marginTop: 10 }}>Certificate label</label>
         <input style={ss.inp} value={certName} onChange={(e) => setCertName(e.target.value)} placeholder="e.g. CSCS, IPAF" />
         <label style={{ display: "block", fontSize: 12, marginTop: 10 }}>Upload certificate (optional)</label>
         <input type="file" accept="image/*,.heic,.heif,application/pdf" onChange={onFile} />
         {certData && <div style={{ fontSize: 12, marginTop: 6 }}>Attached: {certData.name}</div>}
-        <button type="button" style={{ ...ss.btnP, marginTop: 16 }} onClick={submit}>
+        {submitError ? (
+          <p role="alert" style={{ margin: "12px 0 0", fontSize: 13, color: "#A32D2D" }}>
+            {submitError}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          style={{ ...ss.btnP, marginTop: 16, opacity: company.trim() ? 1 : 0.65 }}
+          disabled={!company.trim()}
+          onClick={submit}
+        >
           Submit
         </button>
       </div>

@@ -719,8 +719,14 @@ export default function GeoPhotos() {
           moduleLabel: "geo-photo",
           allowInlineCreate: true,
         })
-      )
+      ) {
+        pushToast({
+          type: "warn",
+          title: "Project required",
+          message: "Select or create a project in the capture form, then save again. The photo draft is still open.",
+        });
         return false;
+      }
       const enriched = { ...row };
       if (enriched.includeInReport && enriched.projectId) {
         enriched.reportOrder = nextGeoPhotoReportOrder(safePhotos, enriched.projectId);
@@ -730,7 +736,10 @@ export default function GeoPhotos() {
       const next = list.some((p) => p?.id === enriched.id)
         ? list.map((p) => (p?.id === enriched.id ? { ...p, ...enriched } : p))
         : [enriched, ...list];
-      if (!save("geo_photos", next)) return false;
+      if (!save("geo_photos", next)) {
+        pushToast({ type: "error", message: "Photo could not be saved. Check available device storage and retry." });
+        return false;
+      }
       setPhotos(next);
       if (enriched.linkedPermitId) {
         persistPermitEvidenceFromGeoPhoto(enriched, { load, save });
@@ -740,7 +749,16 @@ export default function GeoPhotos() {
         detail: `${geoPhotoPresetLabel(enriched.type)} — ${enriched.projectName || "no project"}`,
         module: "geo-photos",
       });
-      pushToast({ type: "success", message: "Geo-photo saved successfully." });
+      // Match filters to the new photo so it is not hidden after save.
+      setFilterProject((current) => {
+        if (!enriched.projectId) return current;
+        if (!current || current === enriched.projectId) return current;
+        return enriched.projectId;
+      });
+      setFilterReport("all");
+      setFilterAction("all");
+      setFilterType("");
+      setQuery("");
       return true;
     },
     [safePhotos, activeProjects, photos, pushToast]
@@ -876,7 +894,7 @@ export default function GeoPhotos() {
       else if (kind === "cad") await downloadGeoPhotosCadBundle(photos, `geo-photos-cad-${stamp}.zip`, opts);
       else if (kind === "gpx") downloadGeoPhotosGpx(photos, `geo-photos-${stamp}.gpx`, opts);
     } catch (e) {
-      window.alert(e?.message || "Export failed");
+      pushToast({ type: "error", title: "Export failed", message: e?.message || "Export failed" });
     } finally {
       setExportBusy("");
     }
@@ -915,7 +933,7 @@ export default function GeoPhotos() {
         }
       />
 
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="geo-photos" />
 
       <div className="geo-photos-toolbar">
         <label className="geo-photos-toolbar__field">
@@ -1113,7 +1131,7 @@ export default function GeoPhotos() {
                   )}
                   <span className="geo-photos-report-pack__label">
                     <strong>{preset.label}</strong>
-                    {p.notes ? ` — ${p.notes.slice(0, 50)}` : ""}
+                    {p.notes ? ` — ${p.notes}` : ""}
                   </span>
                   <button
                     type="button"

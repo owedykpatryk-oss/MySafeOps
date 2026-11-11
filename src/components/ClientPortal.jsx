@@ -489,6 +489,7 @@ export default function ClientPortal() {
             <div>
               <label style={ss.lbl}>Expires (optional)</label>
               <input type="date" value={newPortal.expiresAt||""} onChange={e=>setNewPortal(n=>({...n,expiresAt:e.target.value}))} style={ss.inp} />
+              <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>Leave blank to use the default 14-day expiry.</p>
             </div>
           </div>
           <div style={{ marginBottom:14 }}>

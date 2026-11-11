@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `cs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -48,6 +50,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.spaceDescription || "").trim() && String(form.entryDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -55,9 +58,9 @@ function Form({ item, projects, onSave, onClose }) {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit confined space entry" : "Confined space entry"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>Record only — follow permit-to-work, rescue plan, and competent gas testing.</p>
         <label style={ss.lbl} htmlFor="confined-space-permit-ref">Permit / work package ref</label>
-        <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)}  id="confined-space-permit-ref" />
+        <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)} placeholder="e.g. PTW-2026-014" id="confined-space-permit-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-space-description">Space / task description</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.spaceDescription} onChange={(e) => set("spaceDescription", e.target.value)}  id="confined-space-space-description" />
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.spaceDescription} onChange={(e) => set("spaceDescription", e.target.value)} placeholder="e.g. Valve pit chamber, Level 1 plant room" id="confined-space-space-description" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="confined-space-project-id">
           <option value="">—</option>
@@ -78,25 +81,32 @@ function Form({ item, projects, onSave, onClose }) {
           </div>
         </div>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-entrants">Entrants (names)</label>
-        <input style={ss.inp} value={form.entrants} onChange={(e) => set("entrants", e.target.value)}  id="confined-space-entrants" />
+        <input style={ss.inp} value={form.entrants} onChange={(e) => set("entrants", e.target.value)} placeholder="e.g. J. Smith, A. Bloggs" id="confined-space-entrants" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-top-man">Stand-by / top man</label>
-        <input style={ss.inp} value={form.topMan} onChange={(e) => set("topMan", e.target.value)}  id="confined-space-top-man" />
+        <input style={ss.inp} value={form.topMan} onChange={(e) => set("topMan", e.target.value)} placeholder="e.g. Site supervisor on standby" id="confined-space-top-man" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.gasTestOk} onChange={(e) => set("gasTestOk", e.target.checked)} />
           Gas / atmosphere test satisfactory before entry
         </label>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-rescue-plan-ref">Rescue plan ref</label>
-        <input style={ss.inp} value={form.rescuePlanRef} onChange={(e) => set("rescuePlanRef", e.target.value)}  id="confined-space-rescue-plan-ref" />
+        <input style={ss.inp} value={form.rescuePlanRef} onChange={(e) => set("rescuePlanRef", e.target.value)} placeholder="e.g. RAMS / rescue plan ref" id="confined-space-rescue-plan-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="confined-space-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["spaceDescription","entryDate"], { spaceDescription: "Space description", entryDate: "Entry date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(payload);
           }}>
             {t("save")}
@@ -198,7 +208,12 @@ export default function ConfinedSpaceLog() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.permitRef || "Entry"}</strong> · {r.entryDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.spaceDescription?.slice(0, 100) || "—"}</div>
+                  <div
+                    title={r.spaceDescription || undefined}
+                    style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.4 }}
+                  >
+                    {r.spaceDescription || "—"}
+                  </div>
                   {!r.gasTestOk && <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Gas test not ticked OK</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

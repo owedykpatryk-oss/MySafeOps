@@ -28,6 +28,8 @@ export default function OrgMembers() {
   const [countryAssignments, setCountryAssignments] = useState(() => new Set());
 
   const canManage = Boolean(caps?.orgSettings);
+  const adminCount = useMemo(() => rows.filter((r) => r.role === "admin").length, [rows]);
+
   const visibleRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = rows.filter((r) => {
@@ -184,7 +186,7 @@ export default function OrgMembers() {
       <PageHero
         badgeText="🏢"
         title="Organisation members"
-        lead="Everyone in your workspace. Admins can change roles or remove members (the last admin cannot be removed or demoted)."
+        lead="Everyone in your workspace. Admins can change roles or remove members. When another admin exists, step down via the Role dropdown; the sole admin cannot be removed or demoted."
       />
       <div style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px,100%),1fr))", gap: 8, marginBottom: 10 }}>
@@ -213,6 +215,9 @@ export default function OrgMembers() {
             {visibleRows.map((row) => {
               const isSelf = row.user_id === user.id;
               const disabled = busyId === row.user_id;
+              const isLastAdmin = row.role === "admin" && adminCount <= 1;
+              const removeDisabled = disabled || isLastAdmin;
+              const roleSelectDisabled = disabled || isLastAdmin;
               return (
                 <div
                   key={row.user_id}
@@ -258,15 +263,19 @@ export default function OrgMembers() {
                       </fieldset>
                     ) : null}
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
                     {canManage ? (
                       <>
-                        <label style={{ ...ss.lbl, marginBottom: 0 }}>
-                          Role
+                        <div>
+                          <label htmlFor={`member-role-${row.user_id}`} style={{ ...ss.lbl, marginBottom: 0, display: "block" }}>
+                            Role
+                          </label>
                           <select
+                            id={`member-role-${row.user_id}`}
                             style={{ ...ss.inp, minWidth: 140, marginTop: 4 }}
                             value={row.role}
-                            disabled={disabled}
+                            disabled={roleSelectDisabled}
+                            title={isLastAdmin ? "Cannot demote the last admin — promote another member to Admin first." : "Change role (including demote from Admin when another admin remains)."}
                             onChange={(e) => changeRole(row.user_id, e.target.value)}
                           >
                             {ROLES.map((r) => (
@@ -275,11 +284,12 @@ export default function OrgMembers() {
                               </option>
                             ))}
                           </select>
-                        </label>
+                        </div>
                         <button
                           type="button"
                           style={ss.btnDanger}
-                          disabled={disabled}
+                          disabled={removeDisabled}
+                          title={isLastAdmin ? "Cannot remove the last admin from the organisation." : undefined}
                           onClick={() => removeMember(row.user_id, row.email)}
                         >
                           Remove

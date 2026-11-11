@@ -1897,6 +1897,7 @@ function RiskBadge({ rf }) {
 // ─── Step 1 — Document info ──────────────────────────────────────────────────
 function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied, draftScope, draftDocumentId }) {
   const { t, tf } = useWorkspaceT();
+  const { pushToast } = useToast();
   const ramsLabel = getRamsShortLabel(getOrgMarketId());
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const smartFields = isFeatureEnabled("rams_header_smart_fields");
@@ -2212,6 +2213,24 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied, 
           Similar RAMS already exists: "{probableDuplicate.title || "Untitled"}". Review before issuing.
         </div>
       )}
+
+      {headerMissing.length > 0 && !valid ? (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#633806",
+            background: "#FAEEDA",
+            border: "1px solid #f6d89f",
+            borderRadius: 8,
+            padding: "8px 10px",
+            lineHeight: 1.45,
+          }}
+        >
+          Complete required header fields before continuing: <strong>{headerMissing.join(", ")}</strong>
+        </div>
+      ) : null}
 
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, flexWrap:"wrap" }}>
         <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
@@ -2856,6 +2875,12 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied, 
           onClick={() => {
             if (!valid) {
               trackEvent("rams_header_next_blocked_validation", { missing: headerMissing });
+              const missing = headerMissing.length ? headerMissing : ["Job / document title", "Location / site"];
+              pushToast({
+                type: "error",
+                title: "Cannot continue to Quick pack",
+                message: `Missing: ${missing.join(", ")}`,
+              });
               return;
             }
             if (smartFields) trackEvent("rams_header_quality_score_changed", { score: completenessScore });

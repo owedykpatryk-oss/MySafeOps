@@ -12,6 +12,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import { exportCsv } from "../utils/exportCsv";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useToast } from "../context/ToastContext";
 import { todayLocalISO } from "../utils/localDate";
 import {
   findPlInstrukcja,
@@ -113,9 +114,11 @@ function LibraryPicker({ onPick, onClose }) {
 }
 
 function InstructionForm({ item, workers, onSave, onClose }) {
+  const { pushToast } = useToast();
   const [form, setForm] = useState(item);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const ack = instrukcjaAcknowledgementSummary(form);
+  const canSave = Boolean(String(form.dataWydania || "").trim());
 
   const addWorker = (workerId) => {
     const w = workers.find((x) => x.id === workerId);
@@ -221,11 +224,12 @@ function InstructionForm({ item, workers, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>Anuluj</button>
           <button
             type="button"
-            style={ss.btnP}
+            disabled={!canSave}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
             onClick={() => {
               const check = validateRequiredFields(form, ["dataWydania"], { dataWydania: "Data wydania" });
               if (!check.ok) {
-                window.alert(check.message);
+                pushToast({ type: "warn", title: "Pola wymagane", message: check.message });
                 return;
               }
               onSave(form);

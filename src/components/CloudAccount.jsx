@@ -260,6 +260,7 @@ export default function CloudAccount() {
     captchaBlocksSubmit,
     setCaptchaToken,
     setCaptchaUnavailable,
+    setCaptchaVerifying,
     turnstileNonce,
     resetCaptcha,
     validateCaptcha,
@@ -789,7 +790,14 @@ export default function CloudAccount() {
         </details>
       )}
       <label style={ss.lbl}>Email</label>
-      <input type="email" autoComplete="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
+      <input
+        type="email"
+        autoComplete="email"
+        style={ss.inp}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@company.com"
+      />
       <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
       <input
         type={showPassword ? "text" : "password"}
@@ -799,6 +807,7 @@ export default function CloudAccount() {
         onChange={(e) => setPassword(e.target.value)}
         onKeyUp={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
         onKeyDown={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+        placeholder={creatingAccount ? "Create a strong password" : "Your password"}
       />
       <label
         style={{
@@ -899,6 +908,7 @@ export default function CloudAccount() {
           action="login"
           onTokenChange={setCaptchaToken}
           onUnavailable={setCaptchaUnavailable}
+          onVerifyingChange={setCaptchaVerifying}
         />
       )}
       {lockout.isLocked && (
@@ -925,7 +935,15 @@ export default function CloudAccount() {
               ? "Complete the security check before signing in"
               : undefined
           }
-          onClick={creatingAccount ? () => { setCreatingAccount(false); setMsg(""); } : signIn}
+          onClick={
+            creatingAccount
+              ? () => {
+                  setCreatingAccount(false);
+                  setAcceptLegalTerms(false);
+                  setMsg("");
+                }
+              : signIn
+          }
         >
           {creatingAccount ? "Back to sign in" : "Sign in"}
         </button>

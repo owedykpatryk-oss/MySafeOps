@@ -141,6 +141,7 @@ export default function LoginPage() {
     captchaBlocksSubmit,
     setCaptchaToken,
     setCaptchaUnavailable,
+    setCaptchaVerifying,
     turnstileNonce,
     resetCaptcha,
     validateCaptcha,
@@ -597,6 +598,8 @@ export default function LoginPage() {
     }
   }
 
+  const awaitingEmailConfirmation = Boolean(pendingConfirmationEmail);
+
   return (
     <LoginShell>
       <LoginBrand />
@@ -606,9 +609,85 @@ export default function LoginPage() {
             <Sparkles size={13} aria-hidden />
             Site safety workspace
           </div>
-          <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>{creatingAccount ? "Create your MySafeOps account" : "Welcome back to MySafeOps"}</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>
+            {awaitingEmailConfirmation
+              ? "Check your email"
+              : creatingAccount
+                ? "Create your MySafeOps account"
+                : "Welcome back to MySafeOps"}
+          </h1>
           {cloud ? (
             <>
+              {awaitingEmailConfirmation ? (
+                <>
+                  <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.55 }}>
+                    We sent a confirmation link to <strong>{pendingConfirmationEmail}</strong>. Open the link from your inbox (check spam), then return here to sign in.
+                  </p>
+                  {turnstileConfigured && (
+                    <TurnstileWidget
+                      resetKey={turnstileNonce}
+                      action="login"
+                      onTokenChange={setCaptchaToken}
+                      onUnavailable={setCaptchaUnavailable}
+                      onVerifyingChange={setCaptchaVerifying}
+                    />
+                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+                    <a
+                      href={getInboxUrl(pendingConfirmationEmail)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ ...ss.btnP, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                    >
+                      Open inbox
+                    </a>
+                    <button type="button" style={ss.btn} onClick={resendConfirmationEmail} disabled={busy || resendCooldown > 0 || captchaBlocksSubmit}>
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
+                    </button>
+                    <button
+                      type="button"
+                      style={ss.btn}
+                      onClick={() => {
+                        setPendingConfirmationEmail("");
+                        setResendCooldown(0);
+                        setCreatingAccount(false);
+                        setAcceptLegalTerms(false);
+                        setMsg("");
+                        emailInputRef.current?.focus();
+                      }}
+                      disabled={busy}
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                  {msg ? (
+                    <InlineAlert
+                      type={
+                        msg.toLowerCase().includes("failed") ||
+                        msg.toLowerCase().includes("issue") ||
+                        msg.toLowerCase().includes("could not") ||
+                        msg.toLowerCase().includes("lockout")
+                          ? "error"
+                          : "info"
+                      }
+                      text={msg}
+                      style={{ marginTop: 14 }}
+                    />
+                  ) : null}
+                  <div className="login-card__footer login-card__meta">
+                    <p>
+                      Need help? Contact support:{" "}
+                      <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>
+                        {SUPPORT_EMAIL}
+                      </a>
+                    </p>
+                  </div>
+                  <div className="login-card__footer">
+                    <p>You need an account to open your organisation workspace and trial.</p>
+                  </div>
+                </>
+              ) : (
+                <>
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.55 }}>
                 {creatingAccount
                   ? "Create an account with your work email and a strong password."
@@ -797,6 +876,7 @@ export default function LoginPage() {
                   action="login"
                   onTokenChange={setCaptchaToken}
                   onUnavailable={setCaptchaUnavailable}
+                  onVerifyingChange={setCaptchaVerifying}
                 />
               )}
               {signUpThrottle.isThrottled && (
@@ -819,7 +899,15 @@ export default function LoginPage() {
                   className="login-btn-primary"
                   style={{ ...ss.btnP, width: "100%" }}
                   disabled={busy || (!creatingAccount && (lockout.isLocked || captchaBlocksSubmit))}
-                  onClick={creatingAccount ? () => { setCreatingAccount(false); setMsg(""); } : undefined}
+                  onClick={
+                    creatingAccount
+                      ? () => {
+                          setCreatingAccount(false);
+                          setAcceptLegalTerms(false);
+                          setMsg("");
+                        }
+                      : undefined
+                  }
                   title={
                     !creatingAccount && turnstileConfigured && !captchaToken
                       ? "Complete the security check before signing in"
@@ -838,40 +926,6 @@ export default function LoginPage() {
                 </button>
               </div>
               </form>
-              {pendingConfirmationEmail && (
-                <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff" }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#1e3a8a", marginBottom: 6 }}>Check your email</div>
-                  <div style={{ fontSize: 12, color: "#1e40af", lineHeight: 1.5 }}>
-                    We sent a confirmation link to <strong>{pendingConfirmationEmail}</strong>. Open the link, then return here to sign in.
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                    <a
-                      href={getInboxUrl(pendingConfirmationEmail)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ ...ss.btn, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-                    >
-                      Open inbox
-                    </a>
-                    <button type="button" style={ss.btn} onClick={resendConfirmationEmail} disabled={busy || resendCooldown > 0}>
-                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
-                    </button>
-                    <button
-                      type="button"
-                      style={ss.btn}
-                      onClick={() => {
-                        setPendingConfirmationEmail("");
-                        setResendCooldown(0);
-                        setMsg("");
-                        emailInputRef.current?.focus();
-                      }}
-                      disabled={busy}
-                    >
-                      Change email
-                    </button>
-                  </div>
-                </div>
-              )}
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                 <button
                   type="button"
@@ -959,17 +1013,19 @@ export default function LoginPage() {
                 text={msg}
                 style={{ marginTop: 14 }}
               />
-              <p style={{ marginTop: 12, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                Need help? Contact support:{" "}
-                <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>
-                  {SUPPORT_EMAIL}
-                </a>
-              </p>
-              <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--color-border-tertiary,#e2e8f0)" }}>
-                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0, lineHeight: 1.5 }}>
-                  You need an account to open your organisation workspace and trial.
+              <div className="login-card__footer login-card__meta">
+                <p>
+                  Need help? Contact support:{" "}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>
+                    {SUPPORT_EMAIL}
+                  </a>
                 </p>
               </div>
+              <div className="login-card__footer">
+                <p>You need an account to open your organisation workspace and trial.</p>
+              </div>
+                </>
+              )}
             </>
           ) : (
             <>

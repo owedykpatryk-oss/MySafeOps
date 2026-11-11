@@ -15,7 +15,9 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 import { exportCsv } from "../utils/exportCsv";
 
 const KEY = "gmp_deviation_log";
@@ -24,6 +26,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -43,6 +46,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.description || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -91,7 +95,20 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button
+            type="button"
+            disabled={!canSave}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            onClick={() => {
+              const payload = { ...form, projectName: pm[form.projectId] || "" };
+              const check = validateRequiredFields(payload, ["description"], { description: "Description" });
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
+              onSave(payload);
+            }}
+          >
             {t("save")}
           </button>
         </div>
@@ -191,7 +208,12 @@ export default function GMPDeviationLog() {
           {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card }}>
               <strong>{r.batchRef || "Batch"}</strong> · {r.deviationType}
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>{(r.description || "").slice(0, 120)}{(r.description || "").length > 120 ? "…" : ""}</div>
+              <div
+                title={r.description || undefined}
+                style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4, whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.4 }}
+              >
+                {r.description || "—"}
+              </div>
               <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                 <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                   {t("edit")}

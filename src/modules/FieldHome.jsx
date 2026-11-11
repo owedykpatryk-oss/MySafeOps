@@ -139,7 +139,7 @@ export default function FieldHome() {
     </div>
     {navigationNotice && <p role="alert" className="field-home__hint">{navigationNotice}</p>}
     <nav className="field-home__tabs" aria-label="Site workspace">
-      <div className="field-home__active-site"><span>{project?.name || "Choose a working site"}</span><button type="button" aria-label="Choose another site" onClick={() => {
+      <div className="field-home__active-site"><span title={project?.name || undefined}>{project?.name || "Choose a working site"}</span><button type="button" aria-label="Choose another site" onClick={() => {
         const select = document.getElementById("field-site");
         select?.focus({ preventScroll: true });
         select?.scrollIntoView?.({ block: "center", behavior: "auto" });

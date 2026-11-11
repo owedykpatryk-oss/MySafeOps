@@ -43,6 +43,7 @@ function daysUntil(iso) {
 
 function Form({ item, workers, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -60,6 +61,7 @@ function Form({ item, workers, onSave, onClose }) {
   const [syncToPeople, setSyncToPeople] = useState(Boolean(item?.workerId && item?.expiryDate));
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
+  const canSave = Boolean(form.workerId && String(form.courseName || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -77,7 +79,7 @@ function Form({ item, workers, onSave, onClose }) {
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-course-name">Course / qualification</label>
         <input style={ss.inp} value={form.courseName} onChange={(e) => set("courseName", e.target.value)} placeholder="e.g. IPAF training"  id="training-course-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-provider">Provider</label>
-        <input style={ss.inp} value={form.provider} onChange={(e) => set("provider", e.target.value)}  id="training-provider" />
+        <input style={ss.inp} value={form.provider} onChange={(e) => set("provider", e.target.value)} placeholder="e.g. IPAF centre / training body" id="training-provider" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
             <label style={ss.lbl} htmlFor="training-completed-date">Completed</label>
@@ -107,11 +109,15 @@ function Form({ item, workers, onSave, onClose }) {
           </button>
           <button
             type="button"
-            style={ss.btnP}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
             onClick={() => {
               const payload = { ...form, workerName: wm[form.workerId] || form.workerName || "" };
               const check = validateRequiredFields(payload, ["workerId", "courseName"], { workerId: "Worker", courseName: "Course name" });
-              if (!check.ok) { window.alert(check.message); return; }
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
               onSave(payload, { syncToPeople });
             }}
           >
@@ -337,7 +343,7 @@ export default function TrainingMatrix() {
       >
 
       {(expired.length > 0 || expiring.length > 0) && (
-        <div style={{ ...ss.card, marginBottom: 12, background: expired.length ? "#fef2f2" : "#fffbeb", fontSize: 13 }}>
+        <div style={{ ...ss.card, marginBottom: 12, background: expired.length ? "#fef2f2" : "#fffbeb", color: expired.length ? "#7f1d1d" : "#92400e", fontSize: 13 }}>
           {expired.length > 0 && <div style={{ marginBottom: 6 }}>Expired or overdue: {expired.length} record(s).</div>}
           {expiring.length > 0 && <div>Expiring within 60 days: {expiring.length} record(s).</div>}
         </div>

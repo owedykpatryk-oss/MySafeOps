@@ -1289,7 +1289,7 @@ export default function MainAppLayout() {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: 3,
+                gap: 4,
                 padding: "8px 2px",
                 border: "none",
                 background: "transparent",
@@ -1297,7 +1297,7 @@ export default function MainAppLayout() {
                 color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
                 fontSize: 11,
                 fontFamily: "DM Sans, sans-serif",
-                maxWidth: 78,
+                maxWidth: 88,
                 fontWeight: 600,
               }}
             >

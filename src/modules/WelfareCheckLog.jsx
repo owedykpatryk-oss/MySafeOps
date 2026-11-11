@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
@@ -30,6 +31,7 @@ const ss = ms;
 
 function Form({ item, projects, marketId, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const complianceCopy = getMarketComplianceCopy(marketId);
   const [form, setForm] = useState(
     () =>
@@ -50,6 +52,7 @@ function Form({ item, projects, marketId, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.checkedBy || "").trim() && String(form.checkDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -87,10 +90,10 @@ function Form({ item, projects, marketId, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["checkedBy","checkDate"], { checkedBy: "Checked by", checkDate: "Check date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}

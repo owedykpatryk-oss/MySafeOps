@@ -15,9 +15,11 @@
 
 .mgo--focus { position:fixed; inset:0; z-index:1400; overflow:auto; padding:22px; background:#edf4f1; }
 .mgo--focus .mgo-hero { min-height:156px; }
+.mgo--focus { scroll-padding-top: calc(120px + env(safe-area-inset-top, 0px)); }
 .mgo--focus .mgo-tabs { position:sticky; top:78px; z-index:20; box-shadow:0 10px 26px rgba(18,55,47,.13); }
+.mgo--focus .mgo-smart-card { scroll-margin-top: calc(118px + env(safe-area-inset-top, 0px)); }
 
-.mgo-focus-controls { position:sticky; top:8px; z-index:30; min-height:61px; overflow:hidden; padding:9px 12px 12px; border:1px solid rgba(110,231,183,.2); border-radius:14px; background:linear-gradient(115deg,rgba(7,43,37,.97),rgba(13,88,76,.96)); color:#fff; display:grid; grid-template-columns:minmax(180px,.75fr) minmax(330px,1.25fr) auto; align-items:center; gap:14px; box-shadow:0 14px 35px rgba(9,45,38,.24); backdrop-filter:blur(14px); }
+.mgo-focus-controls { position:sticky; top:8px; z-index:30; min-height:61px; overflow:visible; padding:9px 12px 12px; border:1px solid rgba(110,231,183,.2); border-radius:14px; background:linear-gradient(115deg,rgba(7,43,37,.97),rgba(13,88,76,.96)); color:#fff; display:grid; grid-template-columns:minmax(180px,.75fr) minmax(330px,1.25fr) auto; align-items:center; gap:14px; box-shadow:0 14px 35px rgba(9,45,38,.24); backdrop-filter:blur(14px); }
 .mgo-focus-controls__live span { display:flex; align-items:center; gap:7px; color:#d5fff1; font-size:10px; font-weight:850; text-transform:uppercase; letter-spacing:.08em; }
 .mgo-focus-controls__live span i { width:7px; height:7px; border-radius:50%; background:#34d399; box-shadow:0 0 0 4px rgba(52,211,153,.16); }
 .mgo-focus-controls__live small { display:block; margin:4px 0 0 22px; color:#88b8ad; font-size:8px; }
@@ -119,7 +121,7 @@
 .mgo-briefing__date strong { font-size:13px; }
 .mgo-briefing__date span { margin-top:4px; color:#82908b; font-size:8px; text-transform:uppercase; letter-spacing:.08em; }
 
-.mgo-smart-card { position: relative; overflow: hidden; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 15px; align-items: center; padding: 17px 18px; border: 1px solid #d8e8c8; border-radius: 16px; background: linear-gradient(115deg,#f2f9e9 0%,#fbfff5 52%,#eefbf4 100%); }
+.mgo-smart-card { position: relative; overflow: visible; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 15px; align-items: center; padding: 17px 18px; border: 1px solid #d8e8c8; border-radius: 16px; background: linear-gradient(115deg,#f2f9e9 0%,#fbfff5 52%,#eefbf4 100%); }
 .mgo-smart-card::after { content:""; position:absolute; right:12%; top:-60px; width:160px; height:160px; border-radius:50%; background:rgba(163,230,53,.09); }
 .mgo-smart-card__icon { width: 40px; height: 40px; border-radius: 12px; background: #dff1c8; color: #527d2b; display: grid; place-items: center; }
 .mgo-smart-card__copy { position: relative; z-index: 1; min-width:0; overflow-wrap:anywhere; }
@@ -140,9 +142,10 @@
 .mgo-diary__col li button { width: 100%; min-width:0; overflow-wrap:anywhere; text-align: left; border: 0; background: transparent; border-radius: 8px; padding: 7px 8px; cursor: pointer; }
 .mgo-diary__col li button:hover { background: #f2faf7; }
 .mgo-diary__col li strong, .mgo-diary__col li small { display: block; }
-.mgo-diary__col li strong { font-size: 12px; color: #16352f; }
-.mgo-diary__col li small { margin-top: 2px; font-size: 10px; color: #6b7a74; }
-.mgo-diary__empty { padding: 10px 8px; font-size: 11px; color: #82908b; line-height: 1.45; }
+.mgo-diary__col li strong { font-size: 12px; color: #16352f; line-height: 1.35; overflow-wrap: anywhere; }
+.mgo-diary__col li small { margin-top: 2px; font-size: 10px; color: #6b7a74; line-height: 1.4; overflow-wrap: anywhere; }
+.mgo-diary__col--upcoming li small { color: #4a5c55; }
+.mgo-diary__empty { padding: 10px 8px; font-size: 11px; font-weight: 500; color: #5a6d66; line-height: 1.45; }
 
 .mgo-overview-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 14px; }
 .mgo-command-grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(330px,.75fr); gap:14px; }

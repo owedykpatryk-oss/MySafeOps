@@ -13,7 +13,10 @@ export default function ToolboxTalkAI() {
   const [err, setErr] = useState("");
 
   const run = async () => {
-    if (!topic.trim()) return;
+    if (!topic.trim()) {
+      setErr("Enter a toolbox talk topic first.");
+      return;
+    }
     setErr("");
     setLoading(true);
     setOut("");
@@ -42,7 +45,7 @@ export default function ToolboxTalkAI() {
       />
       <div style={ss.card}>
         <textarea style={ss.ta} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Working near forklift routes, manual handling of panels…" />
-        <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !isAnthropicConfigured()} onClick={run}>
+        <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !isAnthropicConfigured() || !topic.trim()} onClick={run}>
           {loading ? "…" : "Generate talk"}
         </button>
       </div>

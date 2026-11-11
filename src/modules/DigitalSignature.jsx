@@ -200,7 +200,7 @@ function SignatureBlock({ signer, docId, signatures, onSign, onClear }) {
           <div style={{ flex:1, minWidth:160 }}>
             <Row label="Signed at" value={fmtDateTime(existing.timestamp)} />
             <Row label={t("location")} value={existing.gps ? `${existing.gps.lat}, ${existing.gps.lng} (±${existing.gps.accuracy}m)` : "GPS not available"} />
-            <Row label="Device" value={(existing.device||"—").slice(0,60)} />
+            <Row label="Device" value={existing.device || "—"} />
           </div>
         </div>
       )}
@@ -520,13 +520,13 @@ export default function SignatureManager() {
           const pct = total>0?(signed/total)*100:0;
           const complete = total>0&&signed===total;
           return (
-            <div key={doc.id} style={{ ...ss.card, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
+            <div key={doc.id} style={{ ...ss.card, display:"flex", alignItems:"flex-start", gap:14, cursor:"pointer" }}
               onClick={()=>setActiveDoc(doc)}
               onMouseEnter={e=>e.currentTarget.style.borderColor="#5DCAA5"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="var(--color-border-tertiary,#e5e5e5)"}>
               <span style={{ padding:"4px 10px", borderRadius:6, fontSize:11, fontWeight:500, background:"#E6F1FB", color:"#0C447C", whiteSpace:"nowrap", flexShrink:0 }}>{doc.type}</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight:500, fontSize:14, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{doc.title}</div>
+                <div title={doc.title || undefined} style={{ fontWeight:500, fontSize:14, marginBottom:4, overflow:"hidden", display:"-webkit-box", WebkitBoxOrient:"vertical", WebkitLineClamp:2, whiteSpace:"normal", overflowWrap:"anywhere", lineHeight:1.35 }}>{doc.title}</div>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <div style={{ flex:1, height:3, background:"var(--color-border-tertiary,#e5e5e5)", borderRadius:2, maxWidth:120 }}>
                     <div style={{ height:3, borderRadius:2, width:`${pct}%`, background:complete?"#1D9E75":"#0d9488", transition:"width .3s" }} />

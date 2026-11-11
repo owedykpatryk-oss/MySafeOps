@@ -64,7 +64,10 @@ export default function AIRamsGenerator() {
   const [raw, setRaw] = useState("");
 
   const run = async () => {
-    if (!activity.trim()) return;
+    if (!activity.trim()) {
+      setError("Describe the work first, then generate.");
+      return;
+    }
     const requestScope = getScope();
     if (!requestScope) return;
     setError("");
@@ -135,7 +138,7 @@ export default function AIRamsGenerator() {
       <div style={ss.card}>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Describe the work</label>
         <textarea style={ss.ta} value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="e.g. Install stainless pipework in food factory live area, hot works on mezzanine, MEWP for high-level fixings…" />
-        <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !hasKey} onClick={run}>
+        <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !hasKey || !activity.trim()} onClick={run}>
           {loading ? "Generating…" : "Generate RAMS JSON"}
         </button>
       </div>

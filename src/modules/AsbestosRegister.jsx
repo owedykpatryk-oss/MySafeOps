@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `asb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -47,6 +49,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.location || "").trim() && String(form.materialDescription || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -93,10 +96,17 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["location","materialDescription"], { location: "Location", materialDescription: "Material description" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(payload);
           }}>
             {t("save")}
@@ -198,7 +208,7 @@ export default function AsbestosRegister() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.location || "Location"}</strong> · {r.asbestosType}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.materialDescription?.slice(0, 100) || "—"}</div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }} title={r.materialDescription || undefined}>{r.materialDescription || "—"}</div>
                   {r.nextReviewDate && <div style={{ fontSize: 11, marginTop: 4 }}>Next review: {r.nextReviewDate}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

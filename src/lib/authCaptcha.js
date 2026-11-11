@@ -4,17 +4,21 @@ import { isTurnstileEnabled } from "../config/turnstile";
 export const CAPTCHA_LOAD_FAILED_MSG =
   "Security check could not load. Disable ad blockers for this site or refresh the page.";
 
+/** Shown while Turnstile is still loading or retrying — not a terminal failure. */
+export const CAPTCHA_VERIFYING_MSG = "Verifying your security check. Please wait...";
+
 const CAPTCHA_REQUIRED_MSG = "Complete the security check before continuing.";
 
 /**
  * Fail-closed gate: missing site key → skip; configured but unavailable → block; else require token.
- * @param {{ configured: boolean; unavailable?: boolean; token?: string }} state
+ * @param {{ configured: boolean; unavailable?: boolean; verifying?: boolean; token?: string }} state
  * @returns {string | null} User-facing error, or null if OK
  */
-export function validateAuthCaptchaState({ configured, unavailable = false, token = "" }) {
+export function validateAuthCaptchaState({ configured, unavailable = false, verifying = false, token = "" }) {
   if (!configured) return null;
   if (unavailable) return CAPTCHA_LOAD_FAILED_MSG;
   if (String(token || "").trim()) return null;
+  if (verifying) return CAPTCHA_VERIFYING_MSG;
   return CAPTCHA_REQUIRED_MSG;
 }
 

@@ -67,7 +67,7 @@ import { getOrgMarketId } from "../../utils/orgMarket";
 import { getModuleLabelForMarket } from "../../utils/marketLabels";
 import { getDocumentCountryPack } from "../../utils/documentCountryPack";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
-import { safeOpaqueToken, openPrintWindowOrWarn, writePrintWindowDocument } from "../../utils/htmlEscape.js";
+import { safeOpaqueToken, openPrintWindowOrWarn, writePrintWindowDocument, notifyAppToast } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
 import {
   listPermitIncidents,
@@ -577,9 +577,17 @@ function matchWorkerPick(str, workers) {
 
 const ss = {
   ...ms,
+  // Force high-contrast field text so dark permit chrome vars never wash out typed values on white panels.
+  inp: {
+    ...ms.inp,
+    background: "var(--color-background-primary,#fff)",
+    color: "var(--color-text-primary,#0f172a)",
+    WebkitTextFillColor: "var(--color-text-primary,#0f172a)",
+    caretColor: "var(--color-text-primary,#0f172a)",
+  },
   btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   btnR: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
-  ta:   { width:"100%", padding:"10px 12px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:16, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
+  ta:   { width:"100%", padding:"10px 12px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:16, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary,#0f172a)", WebkitTextFillColor:"var(--color-text-primary,#0f172a)", caretColor:"var(--color-text-primary,#0f172a)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
 };
 
 const AUDIT_PAGE_SIZE = 20;
@@ -1364,6 +1372,11 @@ function PermitForm({
       };
     });
     setFieldCaptureOpen(false);
+    notifyAppToast({
+      type: "success",
+      title: "Field entry recorded",
+      message: "Save the permit to keep this field capture.",
+    });
   };
 
   const updateChecklistItemText = (id, text) => {
@@ -2550,10 +2563,16 @@ function PermitForm({
                       const { path } = await uploadPermitEvidencePhoto(f, form.id);
                       // Persist storage path only — signed URLs are minted at display/print time.
                       setForm((prev) => ({ ...prev, evidencePhotoStoragePath: path, evidencePhotoUrl: "" }));
-                      setEvidenceUploadMessage("Image uploaded. Save the permit to keep this attachment.");
+                      const successMsg = "Attachment uploaded successfully. Save the permit to keep it.";
+                      setEvidenceUploadMessage(successMsg);
+                      notifyAppToast({ type: "success", title: "Upload complete", message: successMsg });
                     } catch (err) {
                       setEvidenceUploadMessage("");
-                      window.alert(err?.message || String(err));
+                      notifyAppToast({
+                        type: "error",
+                        title: "Upload failed",
+                        message: err?.message || String(err),
+                      });
                     } finally {
                       setEvidenceUploadBusy(false);
                     }
@@ -2867,7 +2886,7 @@ function PermitForm({
         {/* checklist */}
         <div style={{ marginBottom:16 }}>
           <div className="permit-checklist-header" style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:10, marginBottom:10 }}>
-            <div style={{ fontSize:11, fontWeight:500, color:"var(--permit-text-muted)", textTransform:"uppercase", letterSpacing:"0.05em" }}>
+            <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary,#475569)", textTransform:"uppercase", letterSpacing:"0.05em" }}>
               Pre-work checklist
             </div>
             {typeMeta?.hseUrl ? (
@@ -2880,10 +2899,10 @@ function PermitForm({
               color:allChecked?"#27500A":"#633806" }}>
               {checkCount}/{totalChecks}
             </span>
-            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--permit-text-muted)" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary,#475569)" }}>
               Template v{form.templateVersion || 1}
             </span>
-            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--permit-text-muted)" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary,#475569)" }}>
               Matrix {complianceProfile.matrixVersion || "uk-v2"}
             </span>
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background: legalReady ? "#EAF3DE" : "#FCEBEB", color: legalReady ? "#27500A" : "#791F1F" }}>
@@ -2892,7 +2911,7 @@ function PermitForm({
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"#E6F1FB", color:"#0C447C" }}>
               DataComplete {Math.round(compliance.dataComplete * 100)}%
             </span>
-            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--permit-text-muted)" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary,#475569)" }}>
               Legal review by {nextLegalReviewDate(form.createdAt || new Date().toISOString())}
             </span>
             {flags && (
@@ -2976,10 +2995,39 @@ function PermitForm({
             <div style={{ height:3, borderRadius:2, background:allChecked?"#1D9E75":"#0d9488", transition:"width .3s",
               width:`${totalChecks>0?(checkCount/totalChecks)*100:0}%` }} />
           </div>
-          {checklistItems.map((item)=>(
+          {checklistItems.map((item)=>{
+            const checked = !!form.checklist[item.id];
+            return (
             <label key={item.id} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"7px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)", cursor:"pointer" }}>
-              <input type="checkbox" checked={!!form.checklist[item.id]} onChange={e=>setCheck(item.id,e.target.checked)}
-                style={{ marginTop:2, accentColor:"#0d9488", width:15, height:15, flexShrink:0 }} />
+              <span
+                aria-hidden="true"
+                className="permit-checklist-mark"
+                style={{
+                  width: 20,
+                  height: 20,
+                  marginTop: 1,
+                  borderRadius: 4,
+                  border: `1.5px solid ${checked ? "#1D9E75" : "var(--color-border-secondary,#94a3b8)"}`,
+                  background: checked ? "#1D9E75" : "var(--color-background-primary,#fff)",
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {checked ? (
+                  <svg width={12} height={12} viewBox="0 0 8 8" aria-hidden="true">
+                    <path d="M1 4l2 2 4-4" stroke="#fff" strokeWidth={1.5} fill="none" />
+                  </svg>
+                ) : null}
+              </span>
+              <input
+                type="checkbox"
+                className="permit-checklist-input"
+                checked={checked}
+                onChange={(e) => setCheck(item.id, e.target.checked)}
+                style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
+              />
               <div style={{ display:"flex", alignItems:"center", gap:8, width:"100%" }}>
                 {templateEditMode ? (
                   <div style={{ display:"flex", gap:6, width:"100%", alignItems:"center" }}>
@@ -2993,7 +3041,7 @@ function PermitForm({
                     <button type="button" onClick={() => moveChecklistItem(item.id, "down")} style={{ ...ss.btn, fontSize:11, padding:"2px 6px" }}>↓</button>
                   </div>
                 ) : (
-                  <span style={{ fontSize:13, lineHeight:1.5, color:"var(--permit-text)" }}>{item.text}</span>
+                  <span style={{ fontSize:13, lineHeight:1.5, color:"var(--color-text-primary,#0f172a)" }}>{item.text}</span>
                 )}
                 {templateEditMode && !item.required && (
                   <button type="button" onClick={() => removeChecklistItem(item.id)} style={{ ...ss.btn, fontSize:11, padding:"2px 8px", color:"#A32D2D", borderColor:"#F09595" }}>
@@ -3002,7 +3050,8 @@ function PermitForm({
                 )}
               </div>
             </label>
-          ))}
+            );
+          })}
           {flags && templateEditMode && (
             <div style={{ marginTop:10 }}>
               <button type="button" onClick={addChecklistItem} style={{ ...ss.btn, fontSize:12 }}>
@@ -3592,8 +3641,23 @@ export const PermitCard = memo(function PermitCard({
             <span style={{ overflowWrap:"anywhere" }}>Valid: {fmtDateTime(permit.startDateTime)} → {fmtDateTime(endIso)}</span>
           </div>
           {showDescription && permit.description && (
-            <div style={{ fontSize:metaFontSize, color:"var(--color-text-secondary)", marginTop:4, fontStyle:"italic", overflowWrap:"anywhere" }}>
-              {permit.description.slice(0,100)}{permit.description.length>100?"…":""}
+            <div
+              title={permit.description}
+              style={{
+                fontSize: metaFontSize,
+                color: "var(--color-text-secondary)",
+                marginTop: 4,
+                fontStyle: "italic",
+                overflowWrap: "anywhere",
+                whiteSpace: "normal",
+                display: "-webkit-box",
+                WebkitBoxOrient: "vertical",
+                WebkitLineClamp: 3,
+                overflow: "hidden",
+                lineHeight: 1.4,
+              }}
+            >
+              {permit.description}
             </div>
           )}
           {issueDrift.drift && issueDrift.hasSnapshot && (
@@ -7635,7 +7699,7 @@ export default function PermitSystem() {
 
       {/* stat cards */}
       {permits.length>0 && effectiveViewMode !== "command" && effectiveViewMode !== "map" && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:20 }}>
+        <div className="ptw-status-summary" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:12, marginBottom:20, padding:"0 8px 4px", boxSizing:"border-box" }}>
           {[
             { label:"In review", value:stats.pendingReview, bg:"#FAEEDA", color:"#633806", filter:"pending_review" },
             { label:"Approved", value:stats.approved, bg:"#E6F1FB", color:"#0C447C", filter:"approved" },
@@ -7657,7 +7721,7 @@ export default function PermitSystem() {
                   setFilterStatus(c.filter);
                 }
               }}
-              style={{ background:c.bg, borderRadius:8, padding:"10px 12px", cursor:"pointer" }}
+              style={{ background:c.bg, borderRadius:8, padding:"12px 14px", cursor:"pointer" }}
             >
               <div style={{ fontSize:11, color:c.color, fontWeight:500, marginBottom:2 }}>{c.label}</div>
               <div style={{ fontSize:22, fontWeight:500, color:c.color }}>{c.value}</div>

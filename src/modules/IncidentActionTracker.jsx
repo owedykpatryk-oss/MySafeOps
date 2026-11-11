@@ -14,6 +14,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 import { daysUntilRegisterDue } from "../utils/registerRecordStatus";
@@ -45,6 +46,13 @@ const REMINDER_LEAD_DAYS = 2;
 
 function daysToDue(dueDate) {
   return daysUntilRegisterDue(dueDate);
+}
+
+function incidentLinkSummary(inc) {
+  const type = (inc.type || "incident").replace("_", " ");
+  const loc = inc.location || "no location";
+  const title = String(inc.title || inc.ref || inc.description || "").trim() || "—";
+  return `${type} · ${loc} · ${title}`;
 }
 
 function ActionForm({ item, incidents, onSave, onClose }) {
@@ -119,15 +127,15 @@ function ActionForm({ item, incidents, onSave, onClose }) {
               ...f,
               sourceType: "incident",
               sourceId,
-              sourceLabel: ref ? `${ref.type || "incident"} · ${ref.location || "no location"} · ${String(ref.description || "").slice(0, 48)}` : "",
+              sourceLabel: ref ? incidentLinkSummary(ref) : "",
               sourceProjectName: ref?.projectName || "",
             }));
           }}
          id="incident-action-source-id">
           <option value="">— none —</option>
           {incidents.map((inc) => (
-            <option key={inc.id} value={inc.id}>
-              {(inc.type || "incident").replace("_", " ")} · {inc.location || "no location"} · {String(inc.description || "").slice(0, 48)}
+            <option key={inc.id} value={inc.id} title={incidentLinkSummary(inc)}>
+              {incidentLinkSummary(inc)}
             </option>
           ))}
         </select>
@@ -155,6 +163,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
 
 export default function IncidentActionTracker() {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [items, setItems] = useState(() => load(ACTIONS_KEY, []));
   const [incidents, setIncidents] = useState(() => load(INCIDENTS_KEY, []));
   const [inspections, setInspections] = useState(() => load(INSPECTIONS_KEY, []));
@@ -300,7 +309,14 @@ export default function IncidentActionTracker() {
       moduleId: "incident-actions", moduleLabel: "Incident actions", itemType: "incident_action",
       itemLabel: row => row.title || row.id, sourceKey: ACTIONS_KEY, ids: [id],
     });
-    if (!next) { window.alert("Could not save the recovery copy or deletion. Please retry."); return; }
+    if (!next) {
+      pushToast({
+        type: "error",
+        title: "Delete failed",
+        message: "Could not save the recovery copy or deletion. Please retry.",
+      });
+      return;
+    }
     setItems(next);
   };
 
@@ -374,11 +390,11 @@ export default function IncidentActionTracker() {
     });
 
     if (!created.length) {
-      window.alert("No new suggested actions from inspections/permits.");
+      pushToast({ type: "info", title: "No new suggestions", message: "No new suggested actions from inspections/permits." });
       return;
     }
     setItems((prev) => [...created, ...prev]);
-    window.alert(`Created ${created.length} suggested action(s).`);
+    pushToast({ type: "success", title: "Actions created", message: `Created ${created.length} suggested action(s).` });
   };
 
   return (
@@ -522,7 +538,14 @@ export default function IncidentActionTracker() {
                       <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                         Owner: {row.owner || "—"} · Priority: {row.priority || "—"} · Status: {row.status || "—"}
                       </div>
-                      {row.sourceLabel ? <div style={{ marginTop: 2, fontSize: 11, color: "#0C447C" }}>Linked incident: {row.sourceLabel}</div> : null}
+                      {row.sourceLabel ? (
+                        <div
+                          style={{ marginTop: 2, fontSize: 11, color: "#0C447C", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                          title={row.sourceLabel}
+                        >
+                          Linked incident: {row.sourceLabel}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ textAlign: "right", minWidth: 132 }}>
                       <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Due: {row.dueDate || "—"}</div>

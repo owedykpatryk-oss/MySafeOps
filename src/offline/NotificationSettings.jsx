@@ -177,7 +177,11 @@ export default function NotificationSettings() {
     try {
       const perm = await requestNotificationPermission();
       if (perm !== "granted") {
-        window.alert("Notification permission is required before subscription repair.");
+        pushToast({
+          type: "warn",
+          title: "Permission required",
+          message: "Notification permission is required before subscription repair.",
+        });
         return;
       }
       await unsubscribeFromPush().catch(() => {});
@@ -185,7 +189,11 @@ export default function NotificationSettings() {
       const s = await getNotificationStatus();
       setStatus(s);
       await refreshHealth();
-      window.alert(sub || s?.subscribed ? "Push subscription repaired and synced." : "Repair completed, but subscription is still missing.");
+      pushToast({
+        type: sub || s?.subscribed ? "success" : "warn",
+        title: sub || s?.subscribed ? "Subscription repaired" : "Repair incomplete",
+        message: sub || s?.subscribed ? "Push subscription repaired and synced." : "Repair completed, but subscription is still missing.",
+      });
     } finally {
       setRepairLoading(false);
     }

@@ -47,6 +47,8 @@ import { loadOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
 import {
   addDays,
   buildManagementDiary,
+  resolveManagementJobEnd,
+  resolveManagementJobStart,
   buildPlannerWeeks,
   dateOnly,
   isoDate,
@@ -242,8 +244,8 @@ export default function ManagementOverview() {
         name: project.name || "Unnamed project",
         client: project.client || "Client not set",
         site: project.site || project.address || project.postcode || "Location not set",
-        start: config.start || project.timelineStart || "",
-        end: config.end || project.timelineEnd || project.timelineStart || "",
+        start: resolveManagementJobStart({ start: config.start, project }),
+        end: resolveManagementJobEnd({ start: config.start, end: config.end, project }),
         teamId: config.teamId || "",
         status: config.status || "provisional",
         readiness: buildReadiness(project, dash, config),
@@ -516,7 +518,7 @@ export default function ManagementOverview() {
           <label>Start<input type="date" value={opportunityDraft.start} onChange={(e) => setOpportunityDraft((d) => ({ ...d, start: e.target.value }))} /></label>
           <label>Finish<input type="date" value={opportunityDraft.end} onChange={(e) => setOpportunityDraft((d) => ({ ...d, end: e.target.value }))} /></label>
           <label>Preferred team<select value={opportunityDraft.teamId} onChange={(e) => setOpportunityDraft((d) => ({ ...d, teamId: e.target.value }))}><option value="">Unassigned</option>{state.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
-          <div className="mgo-opportunity-form__actions"><button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setShowOpportunityForm(false)}>{t("cancel")}</button><button className="mgo-btn mgo-btn--primary">Add to planner</button></div>
+          <div className="mgo-opportunity-form__actions"><button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setShowOpportunityForm(false)}>{t("cancel")}</button><button type="submit" className="mgo-btn mgo-btn--primary" disabled={!opportunityDraft.name.trim()}>Add to planner</button></div>
         </form>
       ) : null}
 
@@ -560,8 +562,8 @@ export default function ManagementOverview() {
               <button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setTab("planner")}>Open 90-day planner <ChevronRight size={14} /></button>
             </div>
             <div className="mgo-diary__cols">
-              <div className="mgo-diary__col">
-                <header><CalendarDays size={15} /><strong>Upcoming ({scheduledJobs.length})</strong><small>Next 90 days</small></header>
+              <div className="mgo-diary__col mgo-diary__col--upcoming">
+                <header><CalendarDays size={15} /><strong>Upcoming ({scheduledJobs.length})</strong><small>Next 90 days · in progress included</small></header>
                 <ul>
                   {scheduledJobs.slice(0, 6).map((job) => (
                     <li key={job.id}>
@@ -801,7 +803,7 @@ export default function ManagementOverview() {
 
               {meetingStep === 4 ? <div className="mgo-meeting__job-list">{attentionJobs.slice(0, 12).map((job) => <button type="button" key={job.id} onClick={() => setSelectedJobId(job.id)}><AlertTriangle size={17} /><span><strong>{job.name}</strong><small>{job.teamId ? state.teams.find((team) => team.id === job.teamId)?.name : "No team assigned"} · {readinessForJob(job)}% ready</small></span><span className={`mgo-status mgo-status--${jobTone(job)}`}>{job.status}</span></button>)}{!attentionJobs.length ? <div className="mgo-empty"><CheckCircle2 size={25} /><strong>No decisions required</strong><span>All active jobs are currently ready.</span></div> : null}</div> : null}
 
-              {meetingStep === 5 ? <div className="mgo-actions"><form onSubmit={addMeetingAction}><label>Decision or action<input autoFocus value={newAction.text} onChange={(e) => setNewAction((action) => ({ ...action, text: e.target.value }))} placeholder="e.g. Confirm North Team for Manchester" required /></label><label>Owner<input value={newAction.owner} onChange={(e) => setNewAction((action) => ({ ...action, owner: e.target.value }))} placeholder="Name" /></label><label>Due date<input type="date" value={newAction.due} onChange={(e) => setNewAction((action) => ({ ...action, due: e.target.value }))} /></label><button className="mgo-btn mgo-btn--primary"><Plus size={14} />Add action</button></form><div className="mgo-actions__list">{state.meeting.actions.map((action) => <article key={action.id} className={action.status === "Done" ? "is-done" : ""}><button type="button" aria-label={action.status === "Done" ? "Reopen action" : "Complete action"} onClick={() => updateMeetingAction(action.id, { status: action.status === "Done" ? "Open" : "Done" })}><CheckCircle2 size={17} /></button><span><strong>{action.text}</strong><small>{action.owner || "Unassigned"} · due {dateLabel(action.due)}</small></span><select value={action.status} onChange={(e) => updateMeetingAction(action.id, { status: e.target.value })}><option>Open</option><option>In progress</option><option>Done</option></select><button type="button" aria-label="Remove action" onClick={() => removeMeetingAction(action.id)}><Trash2 size={14} /></button></article>)}{!state.meeting.actions.length ? <div className="mgo-empty"><ListTodo size={25} /><strong>No actions recorded</strong><span>Add decisions during the meeting. They will appear in the Board Pack.</span></div> : null}</div></div> : null}
+              {meetingStep === 5 ? <div className="mgo-actions"><form onSubmit={addMeetingAction}><label>Decision or action<input autoFocus value={newAction.text} onChange={(e) => setNewAction((action) => ({ ...action, text: e.target.value }))} placeholder="e.g. Confirm North Team for Manchester" required /></label><label>Owner<input value={newAction.owner} onChange={(e) => setNewAction((action) => ({ ...action, owner: e.target.value }))} placeholder="Name" /></label><label>Due date<input type="date" value={newAction.due} onChange={(e) => setNewAction((action) => ({ ...action, due: e.target.value }))} /></label><button type="submit" className="mgo-btn mgo-btn--primary" disabled={!newAction.text.trim()}><Plus size={14} />Add action</button></form><div className="mgo-actions__list">{state.meeting.actions.map((action) => <article key={action.id} className={action.status === "Done" ? "is-done" : ""}><button type="button" aria-label={action.status === "Done" ? "Reopen action" : "Complete action"} onClick={() => updateMeetingAction(action.id, { status: action.status === "Done" ? "Open" : "Done" })}><CheckCircle2 size={17} /></button><span><strong>{action.text}</strong><small>{action.owner || "Unassigned"} · due {dateLabel(action.due)}</small></span><select value={action.status} onChange={(e) => updateMeetingAction(action.id, { status: e.target.value })}><option>Open</option><option>In progress</option><option>Done</option></select><button type="button" aria-label="Remove action" onClick={() => removeMeetingAction(action.id)}><Trash2 size={14} /></button></article>)}{!state.meeting.actions.length ? <div className="mgo-empty"><ListTodo size={25} /><strong>No actions recorded</strong><span>Add decisions during the meeting. They will appear in the Board Pack.</span></div> : null}</div></div> : null}
 
               <label className="mgo-meeting__notes">Management notes<textarea value={state.meeting.notes} onChange={(e) => updateMeeting({ notes: e.target.value })} placeholder="Record context, decisions and follow-up notes for the Board Pack..." /></label>
               <footer className="mgo-meeting__stage-nav"><button type="button" disabled={meetingStep === 0} onClick={() => setMeetingStep((step) => Math.max(0, step - 1))}>Previous</button><span>Changes save automatically</span><button type="button" disabled={meetingStep === meetingAgenda.length - 1} onClick={() => setMeetingStep((step) => Math.min(meetingAgenda.length - 1, step + 1))}>Next agenda item <ChevronRight size={13} /></button></footer>

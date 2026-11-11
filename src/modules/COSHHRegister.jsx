@@ -277,8 +277,8 @@ function SubstanceCard({ item, onEdit, onDelete }) {
 
           {/* first aid snippet */}
           {item.firstAid && (
-            <div style={{ marginTop:8, padding:"6px 10px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:6, fontSize:12, color:"var(--color-text-secondary)", borderLeft:"2px solid #E24B4A" }}>
-              <strong style={{ color:"#791F1F" }}>First aid: </strong>{item.firstAid.slice(0,120)}{item.firstAid.length>120?"…":""}
+            <div style={{ marginTop:8, padding:"6px 10px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:6, fontSize:12, color:"var(--color-text-secondary)", borderLeft:"2px solid #E24B4A", whiteSpace:"normal", overflowWrap:"anywhere", lineHeight:1.4 }}>
+              <strong style={{ color:"#791F1F" }}>First aid: </strong>{item.firstAid}
             </div>
           )}
         </div>

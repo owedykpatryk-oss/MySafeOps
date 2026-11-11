@@ -18,6 +18,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
@@ -29,6 +30,7 @@ const ss = ms;
 
 function Form({ item, marketId, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const complianceCopy = getMarketComplianceCopy(marketId);
   const [form, setForm] = useState(
     () =>
@@ -44,6 +46,7 @@ function Form({ item, marketId, onSave, onClose }) {
       }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const canSave = Boolean(String(form.name || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -65,9 +68,16 @@ function Form({ item, marketId, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
             const check = validateRequiredFields(form, ["name"], { name: "Name" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(form);
           }}>
             {t("save")}
@@ -136,7 +146,7 @@ export default function FirstAidRegister() {
         </div>}
       />
 
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="first aid register" />
 
       <RegisterModuleShell
         moduleId="first-aid"

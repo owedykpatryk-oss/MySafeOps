@@ -17,6 +17,8 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { cipPassedSwabCount } from "../utils/registerRecordStatus";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useToast } from "../context/ToastContext";
 
 const KEY = "cip_signoff_register";
 const genId = () => `cip_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -24,6 +26,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -44,6 +47,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.equipmentId || "").trim());
 
   const addSwab = () => set("swabResults", [...(form.swabResults || []), { location: "", atpRlu: "", pass: false }]);
   const patchSwab = (idx, patch) => {
@@ -115,7 +119,20 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
+              const payload = { ...form, projectName: pm[form.projectId] || "" };
+              const check = validateRequiredFields(payload, ["equipmentId"], { equipmentId: "Equipment ID" });
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
+              onSave(payload);
+            }}
+          >
             {t("save")}
           </button>
         </div>

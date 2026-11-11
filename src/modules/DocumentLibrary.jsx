@@ -16,6 +16,7 @@ import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { isD1Configured } from "../lib/d1SyncClient";
 import { replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
+import { useToast } from "../context/ToastContext";
 
 const DOC_META_KEY = "mysafeops_doc_library";
 const R2_UPLOADS_KEY = "mysafeops_r2_uploads";
@@ -77,6 +78,7 @@ async function readDirRecursive(dirHandle, basePath = "") {
 
 export default function DocumentLibrary() {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const { supabase } = useSupabaseAuth();
   const [supported] = useState(() => typeof window !== "undefined" && "showDirectoryPicker" in window);
   const [dirName, setDirName] = useState(() => loadMeta().dirName || "");
@@ -285,6 +287,13 @@ export default function DocumentLibrary() {
       }
       if (!current()) return;
       setR2Msg(`${uploadedCount} file(s) uploaded to cloud storage.${linkedCount < uploadedCount ? ` ${linkedCount} added to the library; ${uploadedCount - linkedCount} waiting for library save.` : ""}${failures.length ? ` ${failures.join("; ")}.` : ""}`);
+      if (uploadedCount > 0 && failures.length === 0 && linkedCount === uploadedCount) {
+        pushToast({
+          type: "success",
+          title: "Upload complete",
+          message: `${uploadedCount} file(s) added to the document library.`,
+        });
+      }
     } catch (err) {
       if (current()) setR2Msg(err.message || "Upload failed");
     } finally {
@@ -304,6 +313,11 @@ export default function DocumentLibrary() {
     setR2Uploads(next);
     for (const row of waiting) pushAudit({ action: "r2_upload", entity: "document", detail: row.key });
     setR2Msg(`${waiting.length} uploaded file(s) added to the library. No files were uploaded again.`);
+    pushToast({
+      type: "success",
+      title: "Library updated",
+      message: `${waiting.length} uploaded file(s) added to the library.`,
+    });
   };
 
   const removeR2Row = (id) => {
@@ -364,7 +378,7 @@ export default function DocumentLibrary() {
         <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>Upload documents from your phone or computer. Files stay linked to this workspace.</p>
         <input ref={r2InputRef} type="file" multiple accept={R2_ACCEPT} style={{ display: "none" }} onChange={onR2Files} />
         <button type="button" style={{ ...ss.btnP, minHeight: 44 }} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
-          {r2Busy ? "Uploading…" : "Upload to cloud"}
+          {r2Busy ? "Uploading\u2026" : "Upload to cloud"}
         </button>
         {r2Msg ? <p role="status" style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p> : null}
         {pendingEntries.length ? <div role="alert" style={{ marginTop: 12 }}>
@@ -372,7 +386,7 @@ export default function DocumentLibrary() {
           <button type="button" style={{ ...ss.btn, minHeight: 44 }} disabled={r2Busy} onClick={retryLibraryEntries}>Retry saving entries</button>
         </div> : null}
         {openError ? <p role="alert">{openError}</p> : null}
-        {isD1Configured() && d1Hydrating ? <p role="status">Loading the shared document library…</p> : null}
+        {isD1Configured() && d1Hydrating ? <p role="status">Loading the shared document library\u2026</p> : null}
         {isD1Configured() && d1OutboxPending ? <p role="status">Library changes are saved on this device and waiting to sync.</p> : null}
         {!visibleUploads.length ? <p style={{ fontSize: 13 }}>No cloud documents yet. Upload a PDF, photo or site document to get started.</p> : null}
         <div style={{ marginTop: 14, maxHeight: 320, overflow: "auto" }}>
@@ -382,7 +396,7 @@ export default function DocumentLibrary() {
               <strong>{entry.name}</strong>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
                 <button type="button" style={{ ...ss.btn, minHeight: 44 }} disabled={openingKey === entry.key} onClick={() => openCloudFile(entry)}>
-                  {openingKey === entry.key ? "Opening…" : "Open file"}
+                  {openingKey === entry.key ? "Opening\u2026" : "Open file"}
                 </button>
                 {view ? <a href={view} target="_blank" rel="noopener noreferrer" style={{ ...ss.btn, minHeight: 44, display: "inline-flex", alignItems: "center" }}>Open link</a> : null}
                 <button type="button" style={{ ...ss.btn, minHeight: 44 }} onClick={() => removeR2Row(entry.id)}>Remove from list</button>

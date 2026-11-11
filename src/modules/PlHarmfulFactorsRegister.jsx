@@ -12,6 +12,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import { exportCsv } from "../utils/exportCsv";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useToast } from "../context/ToastContext";
 import { todayLocalISO } from "../utils/localDate";
 import {
   czynnikRodzaj,
@@ -132,9 +133,11 @@ function LibraryPicker({ onPick, onClose }) {
 }
 
 function MeasurementForm({ item, onSave, onClose }) {
+  const { pushToast } = useToast();
   const [form, setForm] = useState(item);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const ocena = ocenPomiar(form);
+  const canSave = Boolean(String(form.stanowisko || "").trim() && String(form.dataPomiaru || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -263,14 +266,15 @@ function MeasurementForm({ item, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>Anuluj</button>
           <button
             type="button"
-            style={ss.btnP}
+            disabled={!canSave}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
             onClick={() => {
               const check = validateRequiredFields(form, ["stanowisko", "dataPomiaru"], {
                 stanowisko: "Stanowisko pracy",
                 dataPomiaru: "Data pomiaru",
               });
               if (!check.ok) {
-                window.alert(check.message);
+                pushToast({ type: "warn", title: "Pola wymagane", message: check.message });
                 return;
               }
               onSave(form);

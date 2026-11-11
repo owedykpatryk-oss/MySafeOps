@@ -18,6 +18,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `ppe_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -29,6 +30,7 @@ const PPE_ITEMS = ["Hard hat", "Safety boots", "Hi-vis", "Gloves", "Eye protecti
 
 function Form({ item, workers, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -44,6 +46,7 @@ function Form({ item, workers, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
+  const canSave = Boolean(form.workerId && String(form.issuedDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -78,12 +81,20 @@ function Form({ item, workers, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            disabled={!canSave}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            onClick={() => {
             const payload = { ...form, workerName: wm[form.workerId] || form.workerName || "" };
             const check = validateRequiredFields(payload, ["workerId","issuedDate"], { workerId: "Worker", issuedDate: "Date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(payload);
-          }}>
+          }}
+          >
             {t("save")}
           </button>
         </div>

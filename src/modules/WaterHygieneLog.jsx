@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `wh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -47,6 +49,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.location || "").trim() && String(form.checkDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -63,7 +66,7 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="Other">Other</option>
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-location">{t("location")}</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="water-hygiene-location" />
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Site hut WHB"  id="water-hygiene-location" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="water-hygiene-project-id">
           <option value="">—</option>
@@ -89,10 +92,10 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["location","checkDate"], { location: "Location", checkDate: "Check date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}

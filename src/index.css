@@ -80,11 +80,21 @@
     font-weight: 600;
   }
 
+  .app-bottom-nav__btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
   .app-bottom-nav__label {
     line-height: 1.15;
     text-align: center;
+    min-height: 1.15em;
     white-space: normal;
     hyphens: none;
+    overflow-wrap: anywhere;
   }
 
   .app-more-tile-pin,
@@ -284,7 +294,7 @@ div[style*="position: fixed"][style*="inset: 0"]:not(.app-module-overlay):not(.a
 .app-skip-link {
   position: absolute;
   left: 12px;
-  top: 0;
+  top: max(8px, env(safe-area-inset-top, 0px));
   z-index: 100;
   padding: 10px 14px;
   border-radius: 0 0 8px 8px;

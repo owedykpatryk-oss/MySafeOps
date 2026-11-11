@@ -16,6 +16,8 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
 const KEY = "dynamic_risk_assessments";
 const genId = () => `dra_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -23,6 +25,7 @@ const ss = ms;
 
 function Form({ item, projects, ramsDocs, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -41,6 +44,19 @@ function Form({ item, projects, ramsDocs, onSave, onClose }) {
       }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const canSave = Boolean(String(form.location || "").trim() && String(form.taskDescription || "").trim());
+
+  const handleSave = () => {
+    const check = validateRequiredFields(form, ["location", "taskDescription"], {
+      location: "Location / work area",
+      taskDescription: "Task / change in conditions",
+    });
+    if (!check.ok) {
+      pushToast({ type: "warn", title: "Required fields", message: check.message });
+      return;
+    }
+    onSave(form);
+  };
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -62,9 +78,9 @@ function Form({ item, projects, ramsDocs, onSave, onClose }) {
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-location">Location / work area</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="dynamic-risk-assessment-location" />
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Grid B2 – scaffold"  id="dynamic-risk-assessment-location" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-task-description">Task / change in conditions</label>
-        <textarea style={{ ...ss.inp, minHeight: 50 }} value={form.taskDescription} onChange={(e) => set("taskDescription", e.target.value)}  id="dynamic-risk-assessment-task-description" />
+        <textarea style={{ ...ss.inp, minHeight: 50 }} value={form.taskDescription} onChange={(e) => set("taskDescription", e.target.value)} placeholder="What changed on site?"  id="dynamic-risk-assessment-task-description" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-new-hazards">New hazards identified</label>
         <textarea style={{ ...ss.inp, minHeight: 60 }} value={form.newHazards} onChange={(e) => set("newHazards", e.target.value)} placeholder="One per line"  id="dynamic-risk-assessment-new-hazards" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-additional-controls">Additional controls applied</label>
@@ -72,14 +88,14 @@ function Form({ item, projects, ramsDocs, onSave, onClose }) {
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-residual-risk-note">Residual risk / supervisor decision</label>
         <input style={ss.inp} value={form.residualRiskNote} onChange={(e) => set("residualRiskNote", e.target.value)}  id="dynamic-risk-assessment-residual-risk-note" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-author-name">Assessed by</label>
-        <input style={ss.inp} value={form.authorName} onChange={(e) => set("authorName", e.target.value)}  id="dynamic-risk-assessment-author-name" />
+        <input style={ss.inp} value={form.authorName} onChange={(e) => set("authorName", e.target.value)} placeholder="Your name"  id="dynamic-risk-assessment-author-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-author-role">Role</label>
         <input style={ss.inp} value={form.authorRole} onChange={(e) => set("authorRole", e.target.value)} placeholder="Supervisor / AP"  id="dynamic-risk-assessment-author-role" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dynamic-risk-assessment-assessed-at">Date & time</label>
         <input type="datetime-local" style={ss.inp} value={form.assessedAt} onChange={(e) => set("assessedAt", e.target.value)}  id="dynamic-risk-assessment-assessed-at" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
-          <button type="button" style={ss.btnP} onClick={() => onSave(form)}>Save</button>
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={handleSave}>Save</button>
         </div>
       </div>
     </ModuleOverlay>
@@ -121,7 +137,7 @@ export default function DynamicRiskAssessmentRegister() {
           </button>
         }
       />
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="dynamic risk assessments" />
       <RegisterModuleShell moduleId="dynamic-ra" smartContext={{ items: liveItems }} stats={buildRegisterModuleStats("dynamic-ra", liveItems)}>
         {liveItems.length === 0 ? (
           <EmptyState
@@ -136,7 +152,12 @@ export default function DynamicRiskAssessmentRegister() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {listPg.visible(liveItems).map((item) => (
               <div key={item.id} style={{ ...ss.card, padding: 12 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{item.location || item.taskDescription?.slice(0, 60) || "DRA"}</div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{item.location?.trim() || "DRA"}</div>
+                {item.taskDescription?.trim() ? (
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }} title={item.taskDescription}>
+                    {item.taskDescription}
+                  </div>
+                ) : null}
                 <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
                   {item.authorName || "—"} · {item.assessedAt ? new Date(item.assessedAt).toLocaleString("en-GB") : "—"}
                 </div>

@@ -1001,7 +1001,7 @@ export function WorkersModule({ mode = "all" }) {
               display: "flex",
               flexWrap: "wrap",
               gap: 8,
-              alignItems: "center",
+              alignItems: "flex-start",
               padding: "10px 0",
               borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
             }}
@@ -1302,7 +1302,8 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-type">{t("primaryCertificate")}</label>
         <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder={getCompetencyCardHint(getOrgMarketId())}  id="workers-cert-type" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-expiry">{t("certificateExpiry")}</label>
-        <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)}  id="workers-cert-expiry" />
+        <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)} aria-describedby="workers-cert-expiry-hint" id="workers-cert-expiry" />
+        <div id="workers-cert-expiry-hint" style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>Select expiry date</div>
         <div style={{ marginTop: 12, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: "10px 10px 8px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
             <strong style={{ fontSize: 13 }}>{t("readyMadeCertifications")}</strong>
@@ -1450,6 +1451,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const orgSettings = useMemo(() => getOrgSettings(), []);
   const orgMarketId = getOrgMarketId();
   const { t, tf } = useWorkspaceT(orgMarketId);
+  const { pushToast } = useToast();
   const initialDraft = useMemo(() => (!item?.id ? loadProjectWizardDraft() : null), [item?.id]);
   const [form, setForm] = useState(() =>
     projectFormShape(initialDraft?.form || item, { workers, user, orgSettings })
@@ -1850,6 +1852,9 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         hseLead: f.hseLead || "HSE lead",
       };
     });
+    setStep(2);
+    setGeoMsg("Suggestions applied — review Project setup.");
+    pushToast({ type: "success", message: "Suggestions applied — review Project setup." });
   };
 
   const persist = (options = {}) => {
@@ -2463,11 +2468,13 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
                       <div>
                         <label style={ss.lbl} htmlFor="workers-timeline-start">{t("targetStart")}</label>
-                        <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)}  id="workers-timeline-start" />
+                        <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)} aria-describedby="workers-timeline-start-hint" id="workers-timeline-start" />
+                        <div id="workers-timeline-start-hint" style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>Select start date</div>
                       </div>
                       <div>
                         <label style={ss.lbl} htmlFor="workers-timeline-end">{t("targetEnd")}</label>
-                        <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)}  id="workers-timeline-end" />
+                        <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)} aria-describedby="workers-timeline-end-hint" id="workers-timeline-end" />
+                        <div id="workers-timeline-end-hint" style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>Select end date</div>
                       </div>
                     </div>
                     <div className="project-wizard-actions" style={{ marginTop: 10 }}>

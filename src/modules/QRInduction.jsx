@@ -6,6 +6,7 @@ import { loadOrgScoped as load, saveOrgScoped as save, getOrgId, ORG_CHANGED_EVE
 import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
@@ -206,6 +207,11 @@ function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
               ))}
             </div>
           )}
+          {!allChecked && checklist.length > 0 ? (
+            <p role="alert" style={{ margin: "0 0 10px", fontSize: 12, color: "#854F0B" }}>
+              Confirm all {checklist.filter((_, i) => !checked[i]).length} remaining checklist item(s) before continuing.
+            </p>
+          ) : null}
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             <button onClick={()=>setStep(0)} style={ss.btn}>← Back</button>
             <button disabled={!allChecked} onClick={()=>setStep(2)}
@@ -278,7 +284,17 @@ function SiteManager({ sites, onSave, onClose }) {
         {saveError && <p role="alert" style={{ color: "#A32D2D", fontSize: 13 }}>{saveError}</p>}
         {!ed ? (
           <>
-            {liveSites.length===0 && <p style={{ fontSize:13, color:"var(--color-text-secondary)", textAlign:"center", padding:"1rem 0" }}>No sites yet.</p>}
+            {liveSites.length === 0 ? (
+              <EmptyState
+                icon="📍"
+                title="No sites yet"
+                description="Add a site name, address and induction checklist before generating QR codes."
+                actionLabel="Add site"
+                onAction={addSite}
+                variant="dashed"
+                compact
+              />
+            ) : null}
             {liveSites.map(s=>(
               <div key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
                 <div style={{ flex:1 }}>
@@ -317,7 +333,7 @@ function SiteManager({ sites, onSave, onClose }) {
               <div style={{ display:"flex", gap:6 }}>
                 <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCheckItem(ed.id)}
                   placeholder="Add checklist item…" style={{ ...ss.inp, flex:1 }} />
-                <button onClick={()=>addCheckItem(ed.id)} style={ss.btnP}>Add</button>
+                <button onClick={()=>addCheckItem(ed.id)} style={{ ...ss.btnP, opacity: newItem.trim() ? 1 : 0.55 }} disabled={!newItem.trim()}>Add</button>
               </div>
             </div>
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>

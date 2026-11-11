@@ -20,6 +20,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `tt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -41,6 +42,7 @@ function initialPresenterPick(item, workers) {
 
 function Form({ item, projects, workers, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -123,10 +125,17 @@ function Form({ item, projects, workers, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            disabled={!form.topic.trim() || !form.talkDate}
+            style={{ ...ss.btnP, opacity: form.topic.trim() && form.talkDate ? 1 : 0.4 }}
+            onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["topic","talkDate"], { topic: "Topic", talkDate: "Date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(payload);
           }}>
             {t("save")}

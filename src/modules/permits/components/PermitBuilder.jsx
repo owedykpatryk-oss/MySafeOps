@@ -69,11 +69,15 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
         className={`app-module-overlay__panel${wide ? " app-module-overlay__panel--wide" : ""}`}
         style={{
           background: "var(--color-background-primary,#fff)",
+          color: "var(--color-text-primary,#0f172a)",
           borderRadius: "var(--radius-sm,10px)",
           border: "1px solid var(--color-border-tertiary,#e5e5e5)",
           boxShadow: "var(--shadow-sm)",
           padding: 16,
           outline: "none",
+          // Isolate form text from dark permit theme vars on the parent module shell.
+          "--permit-text": "var(--color-text-primary,#0f172a)",
+          "--permit-text-muted": "var(--color-text-secondary,#475569)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>

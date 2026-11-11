@@ -52,8 +52,10 @@ export function buildOrgInviteEmailText(brand: InviteEmailBrand): string {
   return [
     `You've been invited to join ${org} on MySafeOps.`,
     "",
-    `Sign in with ${brand.inviteeEmail} and accept the invite:`,
+    `Open the invite link with ${brand.inviteeEmail}, then create your own password to join:`,
     brand.acceptUrl,
+    "",
+    "We never email a temporary password — you choose your password when you accept the invite.",
     "",
     brand.inviterName ? `Sent on behalf of ${org}${brand.inviterName ? ` · ${brand.inviterName}` : ""}.` : `Sent by ${org}.`,
     "",
@@ -148,7 +150,7 @@ export function buildOrgInviteEmailHtml(brand: InviteEmailBrand): string {
           <tr>
             <td style="padding:28px 32px 8px;">
               <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#334155;">
-                ${inviter ? `<strong style="color:#0f172a">${inviter}</strong> has invited you` : "You've been invited"} to collaborate on <strong style="color:#0f172a">MySafeOps</strong> — RAMS, permits, surveys and site safety in one place.
+                ${inviter ? `<strong style="color:#0f172a">${inviter}</strong> has invited you` : "You've been invited"} to collaborate on <strong style="color:#0f172a">MySafeOps</strong> — RAMS, permits, surveys and site safety in one place. Open the link below and <strong style="color:#0f172a">set your own password</strong> to join (we never send temporary passwords by email).
               </p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin:0 0 24px;">
                 <tr>

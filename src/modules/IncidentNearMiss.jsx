@@ -29,6 +29,7 @@ import { archiveRecordsToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import { exportCsv } from "../utils/exportCsv";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 import { compressImageFile } from "../utils/geoPhotoUtils";
@@ -82,14 +83,14 @@ const STATUS = [
 function buildActionFromIncident(incident) {
   return {
     id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    title: `Follow-up: ${(incident?.location || incident?.type || "incident").toString().slice(0, 64)}`,
+    title: `Follow-up: ${(incident?.location || incident?.type || "incident").toString()}`,
     owner: String(incident?.reportedBy || "").trim() || "Assign owner",
     dueDate: "",
     priority: incident?.severity === "critical" || incident?.severity === "high" ? "high" : "medium",
     status: "open",
     sourceType: "incident",
     sourceId: incident?.id || "",
-    sourceLabel: `${incident?.type || "incident"} · ${incident?.location || "no location"} · ${String(incident?.description || "").slice(0, 48)}`,
+    sourceLabel: `${incident?.type || "incident"} · ${incident?.location || "no location"} · ${String(incident?.description || "").trim() || "no description"}`,
     sourceProjectName: incident?.projectName || "",
     correctiveAction: "",
     verificationNote: "",
@@ -356,6 +357,9 @@ function IncidentForm({ item, projects, onSave, onClose }) {
   const [gpsBusy, setGpsBusy] = useState(false);
   const [gpsError, setGpsError] = useState("");
   const photoRef = useRef(null);
+  const saveDisabled =
+    !String(form.location || "").trim() ||
+    !(String(form.description || "").trim() || buildQuickSummary(form.quickFlags || [], form.quickSummary || ""));
 
   const toggleQuickFlag = (id) =>
     setForm((f) => {
@@ -526,7 +530,8 @@ function IncidentForm({ item, projects, onSave, onClose }) {
           </button>
           <button
             type="button"
-            style={ss.btnP}
+            disabled={saveDisabled}
+            style={{ ...ss.btnP, opacity: saveDisabled ? 0.4 : 1 }}
             onClick={() => {
               submitOverlayForm(draftKey, {
                 ...form,
@@ -545,6 +550,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
 
 export default function IncidentNearMiss() {
   const { t, marketId } = useWorkspaceT();
+  const { pushToast } = useToast();
   const reportableLabel = marketId === "pl" ? "moduł zdarzeń PIP" : marketId === "de" ? "moduł Unfallanzeige" : marketId === "at" ? "moduł AUVA" : marketId === "ch" ? "moduł Suva" : marketId === "au" ? "notifiable incidents module" : "RIDDOR module";
   const { caps } = useApp();
   const [items, setItems] = useState(loadIncidentsMerged);
@@ -660,13 +666,17 @@ export default function IncidentNearMiss() {
   const createActionFromIncident = (incident) => {
     const existingOpen = (actions || []).some((a) => a.sourceId === incident.id && a.status !== "closed");
     if (existingOpen) {
-      window.alert("Open action already exists for this incident.");
+      pushToast({ type: "info", title: "Action already open", message: "An open action already exists for this incident." });
       return;
     }
     const next = [buildActionFromIncident(incident), ...(actions || [])];
     setActions(next);
     pushAudit({ action: "incident_action_create", entity: "incident_action", detail: incident.id });
-    window.alert("Incident action created. Open Incident Action Tracker to assign and set due date.");
+    pushToast({
+      type: "success",
+      title: "Action created",
+      message: "Open Incident Action Tracker to assign an owner and due date.",
+    });
   };
 
   return (
@@ -758,7 +768,12 @@ export default function IncidentNearMiss() {
                     {r.occurredAt?.replace("T", " ")} {r.location ? `· ${r.location}` : ""}
                     {r.projectName ? ` · ${r.projectName}` : ""}
                   </div>
-                  <div style={{ fontSize: 13, marginTop: 6 }}>{r.description?.slice(0, 200) || "—"}</div>
+                  <div
+                    title={r.description || undefined}
+                    style={{ fontSize: 13, marginTop: 6, whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.4 }}
+                  >
+                    {r.description || "—"}
+                  </div>
                   {Array.isArray(r.quickFlags) && r.quickFlags.length > 0 ? (
                     <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {r.quickFlags.map((flag) => (

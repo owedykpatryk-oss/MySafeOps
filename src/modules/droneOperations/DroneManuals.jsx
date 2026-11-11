@@ -22,7 +22,8 @@ export default function DroneManuals({
   const [selected, setSelected] = useState(() => pendingManualEdits.get(recoveryKey)?.value.id || ""),
     [error, setError] = useState(""),
     [pending, setPending] = useState(() => pendingManualEdits.get(recoveryKey) || null),
-    [savedAt, setSavedAt] = useState("");
+    [savedAt, setSavedAt] = useState(""),
+    [openChapterId, setOpenChapterId] = useState(null);
   const stored = manuals.find((m) => m.id === selected && regionOf(m) === regionCode);
   const manual = pending?.value || stored;
   const sections = manualSections(manual || { regionCode, aircraftKind: regionCode === "au" ? "helicopter" : "drone" });
@@ -294,6 +295,7 @@ export default function DroneManuals({
                         type="email"
                         value={manual.company?.email || ""}
                         onChange={(e) => update({ company: { ...manual.company, email: e.target.value } })}
+                        placeholder="ops@company.com"
                       />
                     </label>
                     <label>
@@ -301,6 +303,7 @@ export default function DroneManuals({
                       <input
                         value={manual.company?.phone || ""}
                         onChange={(e) => update({ company: { ...manual.company, phone: e.target.value } })}
+                        placeholder="+44 …"
                       />
                     </label>
                     {regionCode === "au" && (
@@ -362,7 +365,12 @@ export default function DroneManuals({
                 </div>
                 <fieldset disabled={!canEdit || locked}>
                   {sections.map((s, index) => (
-                    <details key={s.id} id={`manual-${s.id}`}>
+                    <details
+                      key={s.id}
+                      id={`manual-${s.id}`}
+                      open={openChapterId === s.id}
+                      onToggle={(event) => setOpenChapterId(event.currentTarget.open ? s.id : null)}
+                    >
                       <summary>
                         <span className="manual-chapter-number">{String(index + 1).padStart(2, "0")}</span>
                         <span>

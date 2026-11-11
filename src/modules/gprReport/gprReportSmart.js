@@ -392,7 +392,7 @@ export function gprSmartTips(report, project, linkedSurveyReport = null) {
     const visual = buildGprLineLengthSummary(report);
     const cmp = buildGprSurveyLineComparison(visual, linkedSurveyReport);
     if (cmp.narrative?.includes("After GPR verification")) {
-      tips.push({ level: "info", text: cmp.narrative.slice(0, 220) + (cmp.narrative.length > 220 ? "…" : "") });
+      tips.push({ level: "info", text: cmp.narrative });
     }
     const unverified = cmp.rows?.filter((r) => r.surveyLengthM > 0 && r.gprLengthM === 0) || [];
     if (unverified.length) {

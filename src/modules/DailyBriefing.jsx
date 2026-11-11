@@ -259,6 +259,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
   const [conductPick, setConductPick] = useState("");
   const [workerAddSelect, setWorkerAddSelect] = useState("");
   const [guestName, setGuestName] = useState("");
+  const [guestError, setGuestError] = useState("");
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const toggleTopic = (t) =>
@@ -280,7 +281,11 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
   };
   const addGuestAttendee = () => {
     const name = guestName.trim();
-    if (!name) return;
+    if (!name) {
+      setGuestError("Enter a guest name before adding.");
+      return;
+    }
+    setGuestError("");
     set("attendees", [
       ...form.attendees,
       { id: genId(), name, role: "", present: true, sig: null, sigTime: null, external: true },
@@ -314,6 +319,10 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
   const presentCount = form.attendees.filter((a) => a.present).length;
   const signedCount = form.attendees.filter((a) => a.sig).length;
   const valid = form.location?.trim() && form.conductedBy?.trim() && presentCount > 0;
+  const missingSaveFields = [];
+  if (!form.location?.trim()) missingSaveFields.push("location");
+  if (!form.conductedBy?.trim()) missingSaveFields.push("conductor (conducted by)");
+  if (presentCount < 1) missingSaveFields.push("at least one present attendee");
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -665,20 +674,28 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <input
               value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
+              onChange={(e) => {
+                setGuestName(e.target.value);
+                if (guestError) setGuestError("");
+              }}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGuestAttendee())}
               placeholder="Guest name"
+              aria-invalid={guestError ? "true" : undefined}
               style={{ ...ss.inp, flex: "1 1 200px", minWidth: 0 }}
             />
             <button
               type="button"
               onClick={addGuestAttendee}
-              disabled={!guestName.trim()}
-              style={{ ...ss.btn, fontSize: 12, opacity: guestName.trim() ? 1 : 0.45 }}
+              style={{ ...ss.btn, fontSize: 12, opacity: guestName.trim() ? 1 : 0.75 }}
             >
               + Add guest
             </button>
           </div>
+          {guestError ? (
+            <p role="alert" style={{ margin: "6px 0 0", fontSize: 12, color: "#A32D2D" }}>
+              {guestError}
+            </p>
+          ) : null}
         </div>
 
         {/* notes */}
@@ -693,6 +710,11 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
            id="daily-briefing-notes" />
         </div>
 
+        {!valid ? (
+          <div role="alert" style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, fontSize: 12, background: "#FEF3F2", border: "0.5px solid #FECDCA", color: "#912018" }}>
+            Complete before saving: {missingSaveFields.join(", ")}.
+          </div>
+        ) : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={ss.btn}>
             {t("cancel")}

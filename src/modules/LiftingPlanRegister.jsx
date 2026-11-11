@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
@@ -30,6 +31,7 @@ const ss = ms;
 
 function Form({ item, projects, marketId, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const complianceCopy = getMarketComplianceCopy(marketId);
   const [form, setForm] = useState(
     () =>
@@ -52,6 +54,7 @@ function Form({ item, projects, marketId, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.liftRef || "").trim() && String(form.liftDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -93,10 +96,17 @@ function Form({ item, projects, marketId, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["liftRef","liftDate"], { liftRef: "Lift ref", liftDate: "Lift date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(payload);
           }}>
             {t("save")}
@@ -199,7 +209,12 @@ export default function LiftingPlanRegister() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.liftRef || "Lift"}</strong> · {r.liftDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.loadDescription?.slice(0, 90) || "—"}</div>
+                  <div
+                    title={r.loadDescription || undefined}
+                    style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.4 }}
+                  >
+                    {r.loadDescription || "—"}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="lifting" record={r} />

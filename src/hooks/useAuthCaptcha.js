@@ -16,6 +16,7 @@ export function useAuthCaptcha() {
   const [captchaToken, setCaptchaToken] = useState("");
   const [turnstileNonce, setTurnstileNonce] = useState(0);
   const [captchaUnavailable, setCaptchaUnavailable] = useState(false);
+  const [captchaVerifying, setCaptchaVerifying] = useState(false);
   const turnstileConfigured = isTurnstileEnabled();
   /** Widget should render whenever a site key is configured (even after load failure). */
   const enabled = turnstileConfigured;
@@ -28,6 +29,7 @@ export function useAuthCaptcha() {
   const resetCaptcha = useCallback(() => {
     setCaptchaToken("");
     setCaptchaUnavailable(false);
+    setCaptchaVerifying(false);
     setTurnstileNonce((n) => n + 1);
   }, []);
 
@@ -35,9 +37,10 @@ export function useAuthCaptcha() {
     return validateAuthCaptchaState({
       configured: turnstileConfigured,
       unavailable: captchaUnavailable,
+      verifying: captchaVerifying,
       token: captchaToken,
     });
-  }, [turnstileConfigured, captchaUnavailable, captchaToken]);
+  }, [turnstileConfigured, captchaUnavailable, captchaVerifying, captchaToken]);
 
   const wrapAuthOptions = useCallback(
     (options = {}) => withCaptchaOptions(options, captchaToken),
@@ -52,6 +55,8 @@ export function useAuthCaptcha() {
     captchaBlocksSubmit,
     setCaptchaToken,
     setCaptchaUnavailable,
+    captchaVerifying,
+    setCaptchaVerifying,
     turnstileNonce,
     resetCaptcha,
     validateCaptcha,

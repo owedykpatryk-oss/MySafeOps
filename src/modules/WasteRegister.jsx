@@ -17,6 +17,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `waste_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const WASTE_CODES = ["Non-hazardous", "Inert", "Hazardous — EWC code required"
 
 function WasteForm({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -48,6 +50,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.description || "").trim() && String(form.transferDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -105,10 +108,17 @@ function WasteForm({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["description","transferDate"], { description: "Waste description", transferDate: "Transfer date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) {
+              pushToast({ type: "warn", title: "Required fields", message: check.message });
+              return;
+            }
             onSave(payload);
           }}>
             {t("save")}
@@ -226,7 +236,7 @@ export default function WasteRegister() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{w.wtnRef || "No ref"}</strong> · {w.transferDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{w.description?.slice(0, 120) || "—"}</div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }} title={w.description || undefined}>{w.description || "—"}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="waste" record={w} />

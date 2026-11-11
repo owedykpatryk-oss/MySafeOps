@@ -41,6 +41,7 @@ import { PDE_AREA_KINDS, pdeAreaKindMeta, isPolygonDrawingObject } from "./permi
 import { projectBoundaryFromDraftRing } from "./permits/projectDrawingBoundary";
 import { isR2StorageConfigured, uploadFileToR2Storage } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
+import { notifyAppToast } from "../utils/htmlEscape.js";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
@@ -516,8 +517,15 @@ export default function ProjectDrawingEditor() {
     setSelectedIds((sel) => sel.filter((id) => !ids.has(id)));
   }, [projectId, planId, pushHistory]);
 
-  const refreshPlans = useCallback(() => {
+  const refreshPlans = useCallback((opts = {}) => {
     setProjectPlans(listProjectPlans());
+    if (opts?.notify) {
+      notifyAppToast({
+        type: "success",
+        title: "Plans reloaded",
+        message: "Plans reloaded from storage.",
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -3036,7 +3044,7 @@ export default function ProjectDrawingEditor() {
                 }}
               />
             </label>
-            <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} onClick={refreshPlans} title="Reload plans from storage (e.g. after upload in Permits)">
+            <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} onClick={() => refreshPlans({ notify: true })} title="Reload plans from storage (e.g. after upload in Permits)">
               Refresh plans
             </button>
             <button

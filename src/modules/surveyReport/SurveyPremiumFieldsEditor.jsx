@@ -436,7 +436,7 @@ export default function SurveyPremiumFieldsEditor({
                 <option value="">— Select —</option>
                 {projectGpr.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {(g.ref || g.title || g.id).slice(0, 48)}
+                    {g.ref || g.title || g.id}
                     {(g.anomalies || []).length
                       ? ` · ${(g.anomalies || []).length} anomal${(g.anomalies || []).length === 1 ? "y" : "ies"}`
                       : ""}

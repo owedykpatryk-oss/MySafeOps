@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `gate_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -47,6 +49,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.company || "").trim() && String(form.driverName || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -67,9 +70,9 @@ function Form({ item, projects, onSave, onClose }) {
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-vehicle-reg">Vehicle registration</label>
         <input style={ss.inp} value={form.vehicleReg} onChange={(e) => set("vehicleReg", e.target.value.toUpperCase())}  id="gate-book-vehicle-reg" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-company">Company / haulier</label>
-        <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)}  id="gate-book-company" />
+        <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)} placeholder="Company / haulier"  id="gate-book-company" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-driver-name">Driver</label>
-        <input style={ss.inp} value={form.driverName} onChange={(e) => set("driverName", e.target.value)}  id="gate-book-driver-name" />
+        <input style={ss.inp} value={form.driverName} onChange={(e) => set("driverName", e.target.value)} placeholder="Driver name"  id="gate-book-driver-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-purpose">Purpose</label>
         <select style={ss.inp} value={form.purpose} onChange={(e) => set("purpose", e.target.value)} id="gate-book-purpose">
           <option value="Delivery">Delivery</option>
@@ -93,10 +96,10 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["company","driverName"], { company: "Company", driverName: "Driver" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}

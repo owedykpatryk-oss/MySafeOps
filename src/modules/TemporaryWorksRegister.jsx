@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `tw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -30,6 +31,7 @@ const CATEGORIES = ["Propping / needling", "Façade retention", "Formwork / fals
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -51,6 +53,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.description || "").trim() && String(form.location || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -105,12 +108,20 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
-            const payload = { ...form, projectName: pm[form.projectId] || "" };
-            const check = validateRequiredFields(payload, ["description","location"], { description: "Description", location: "Location" });
-            if (!check.ok) { window.alert(check.message); return; }
-            onSave(payload);
-          }}>
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
+              const payload = { ...form, projectName: pm[form.projectId] || "" };
+              const check = validateRequiredFields(payload, ["description","location"], { description: "Description", location: "Location" });
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
+              onSave(payload);
+            }}
+          >
             {t("save")}
           </button>
         </div>

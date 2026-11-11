@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { getPriceAdjustmentDetail } from "../../lib/billingPlans";
 import { getLandingFaqCopy } from "../../data/landingMarketContent";
 
 /** @param {{ market: import("../../config/markets").MarketConfig }} props */
 export default function LandingFaqSection({ market }) {
+  const [openId, setOpenId] = useState(null);
   const faqCopy = getLandingFaqCopy(market.id);
   const trialAnswer =
     market.id === "pl"
@@ -102,7 +104,14 @@ export default function LandingFaqSection({ market }) {
         </div>
         <div className="landing-faq-list">
           {faq.map((item) => (
-            <details key={item.q} name="landing-faq" className="landing-faq-item fu">
+            <details
+              key={item.q}
+              className="landing-faq-item fu"
+              open={openId === item.q}
+              onToggle={(event) => {
+                setOpenId(event.currentTarget.open ? item.q : null);
+              }}
+            >
               <summary>{item.q}</summary>
               <p>{item.a}</p>
             </details>

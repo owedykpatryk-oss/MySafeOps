@@ -65,11 +65,18 @@ function loadTurnstileScript() {
  * @param {{
  *   onTokenChange: (token: string) => void;
  *   onUnavailable?: (unavailable: boolean) => void;
+ *   onVerifyingChange?: (verifying: boolean) => void;
  *   action?: string;
  *   resetKey?: number;
  * }} props
  */
-export default function TurnstileWidget({ onTokenChange, onUnavailable, action = "login", resetKey = 0 }) {
+export default function TurnstileWidget({
+  onTokenChange,
+  onUnavailable,
+  onVerifyingChange,
+  action = "login",
+  resetKey = 0,
+}) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const gotTokenRef = useRef(false);
@@ -77,14 +84,20 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
   const retryWatchdogRef = useRef(null);
   const onTokenChangeRef = useRef(onTokenChange);
   const onUnavailableRef = useRef(onUnavailable);
+  const onVerifyingChangeRef = useRef(onVerifyingChange);
   onTokenChangeRef.current = onTokenChange;
   onUnavailableRef.current = onUnavailable;
+  onVerifyingChangeRef.current = onVerifyingChange;
   const [loadError, setLoadError] = useState("");
   const [waiting, setWaiting] = useState(true);
   const [localRetry, setLocalRetry] = useState(0);
 
   const reportUnavailable = (unavailable) => {
     onUnavailableRef.current?.(unavailable);
+  };
+
+  const reportVerifying = (verifying) => {
+    onVerifyingChangeRef.current?.(verifying);
   };
 
   const handleLoadFailure = (message) => {
@@ -94,6 +107,7 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
     reportUnavailable(true);
     setWaiting(false);
     setLoadError(message || CAPTCHA_LOAD_FAILED_MSG);
+    reportVerifying(false);
     onTokenChangeRef.current("");
   };
 
@@ -106,6 +120,7 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
     setLoadError("");
     setWaiting(true);
     reportUnavailable(false);
+    reportVerifying(true);
 
     const watchdogId = window.setTimeout(() => {
       if (cancelled || gotTokenRef.current) return;
@@ -147,6 +162,7 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
             setWaiting(false);
             setLoadError("");
             reportUnavailable(false);
+            reportVerifying(false);
             onTokenChangeRef.current(token);
           },
           "expired-callback": () => {
@@ -164,6 +180,7 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
             // Turnstile retries automatically; allow that retry before reporting a load failure.
             setWaiting(true);
             setLoadError("");
+            reportVerifying(true);
             if (retryWatchdogRef.current == null) {
               retryWatchdogRef.current = window.setTimeout(() => {
                 if (!gotTokenRef.current) handleLoadFailure(CAPTCHA_LOAD_FAILED_MSG);
@@ -184,6 +201,7 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
       window.clearTimeout(watchdogId);
       window.clearTimeout(retryWatchdogRef.current);
       retryWatchdogRef.current = null;
+      reportVerifying(false);
       if (widgetIdRef.current != null && window.turnstile?.remove) {
         try {
           window.turnstile.remove(widgetIdRef.current);

@@ -527,6 +527,11 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                 }),
               true
             )}
+            {!project && !form.surveyType ? (
+              <span style={{ fontSize: 11, color: "#854F0B", alignSelf: "center" }}>
+                Select a project or survey type to prepare the issue pack.
+              </span>
+            ) : null}
             <button
               type="button"
               style={{
@@ -540,6 +545,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                 fontWeight: 600,
               }}
               disabled={Boolean(busy) || (!project && !form.surveyType)}
+              title={!project && !form.surveyType ? "Select a project or survey type first" : undefined}
               onClick={() =>
                 run("Prepare issue pack", async () => {
                   const { report, summary } = await runSurveyIssuePackPrep(form, {
@@ -3852,7 +3858,7 @@ export default function SurveyReport() {
         {listSummary.needsWork > 0 && (
           <button
             type="button"
-            style={{ ...ss.btn, fontSize: 12, borderColor: "#fcd34d", background: "#fffbeb" }}
+            style={{ ...ss.btn, fontSize: 12, borderColor: "#fcd34d", background: "#fffbeb", color: "#92400e" }}
             onClick={() => {
               setFilter("draft");
               setListSort("incomplete");

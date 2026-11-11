@@ -20,6 +20,7 @@ import { getVehicleDueAlerts } from "../utils/vehicleComplianceDue";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `veh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -42,6 +43,7 @@ function dueTone(days) {
 
 function Form({ item, projects, workers, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -64,6 +66,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
   const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
+  const canSave = Boolean(String(form.registration || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -138,7 +141,8 @@ function Form({ item, projects, workers, onSave, onClose }) {
           </button>
           <button
             type="button"
-            style={ss.btnP}
+            disabled={!canSave}
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
             onClick={() => {
               const payload = {
                 ...form,
@@ -146,7 +150,10 @@ function Form({ item, projects, workers, onSave, onClose }) {
                 assignedWorkerName: wm[form.assignedWorkerId] || "",
               };
               const check = validateRequiredFields(payload, ["registration"], { registration: "Registration" });
-              if (!check.ok) { window.alert(check.message); return; }
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
               onSave(payload);
             }}
           >
@@ -160,6 +167,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
 
 export default function VehicleFleetRegister() {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("vehicle_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -232,7 +240,14 @@ export default function VehicleFleetRegister() {
 
   const recordDailyCheck = (vehicle) => {
     const stamp = today();
-    if (vehicle.lastDailyCheckDate === stamp) return;
+    if (vehicle.lastDailyCheckDate === stamp) {
+      pushToast({
+        type: "info",
+        title: "Already checked",
+        message: `Daily check for ${vehicle.registration || vehicle.assetTag || "this vehicle"} was already recorded today.`,
+      });
+      return;
+    }
     const updated = { ...vehicle, lastDailyCheckDate: stamp };
     setItems((p) => p.map((x) => (x.id === updated.id ? updated : x)));
     pushAudit({ action: "vehicle_daily_check", entity: "vehicles", detail: updated.id });
@@ -276,7 +291,7 @@ export default function VehicleFleetRegister() {
 
       <RegisterModuleShell moduleId="vehicles" smartContext={{ items: liveItems }} stats={buildRegisterModuleStats("vehicles", liveItems)}>
         {dueAlerts.length > 0 ? (
-          <div style={{ ...ss.card, marginBottom: 12, background: dueAlerts.some((a) => a.severity === "expired") ? "#fef2f2" : "#fffbeb", fontSize: 13 }}>
+          <div style={{ ...ss.card, marginBottom: 12, background: dueAlerts.some((a) => a.severity === "expired") ? "#fef2f2" : "#fffbeb", color: dueAlerts.some((a) => a.severity === "expired") ? "#7f1d1d" : "#92400e", fontSize: 13 }}>
             {dueAlerts.filter((a) => a.severity === "expired").length > 0 ? (
               <div style={{ marginBottom: 4 }}>
                 Overdue: {dueAlerts.filter((a) => a.severity === "expired").length} compliance date(s) — do not deploy until resolved.

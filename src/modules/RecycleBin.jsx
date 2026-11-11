@@ -46,6 +46,7 @@ export default function RecycleBin() {
   const refreshAndResetPaging = () => {
     listPg.reset();
     setItems(listRecycleBinEntries());
+    setFeedback({ error: false, message: "List updated." });
   };
 
   useEffect(() => {
@@ -122,6 +123,25 @@ export default function RecycleBin() {
           <button type="button" style={ss.btn} aria-label="Dismiss notification" onClick={() => setFeedback(null)}>×</button>
         </div>
       )}
+      {items.length === 0 ? (
+        <div
+          className="app-surface-card"
+          style={{
+            ...ss.card,
+            marginBottom: 14,
+            padding: "28px 20px",
+            textAlign: "center",
+            borderStyle: "dashed",
+            background: "var(--color-background-secondary, #f8fafc)",
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Recycle bin is empty</div>
+          <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+            Deleted records will appear here for {RECYCLE_RETENTION_DAYS} days before they are removed automatically.
+          </div>
+        </div>
+      ) : null}
+
       <div className="app-surface-card" style={{ ...ss.card, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={ss.chip}>Items: {items.length}</span>
@@ -135,7 +155,7 @@ export default function RecycleBin() {
 
       <div className="app-surface-card" style={ss.card}>
         {items.length === 0 ? (
-          <div style={{ color: "var(--color-text-secondary)" }}>Recycle bin is empty.</div>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>No deleted items to show.</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {listPg.visible(items).map((item) => (

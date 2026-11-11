@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `env_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -30,6 +31,7 @@ const CATS = ["Spill / leak", "Dust / emissions", "Noise complaint", "Waste non-
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -47,6 +49,7 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.description || "").trim() && String(form.eventDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -85,10 +88,10 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["description","eventDate"], { description: "Description", eventDate: "Event date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}
@@ -190,7 +193,7 @@ export default function EnvironmentalLog() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.category}</strong> · {r.eventDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.description?.slice(0, 140) || "—"}</div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }} title={r.description || undefined}>{r.description || "—"}</div>
                   {!r.closedOut && <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Open</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

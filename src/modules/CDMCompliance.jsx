@@ -6,6 +6,7 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -19,6 +20,7 @@ import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { assessComplianceNotification, getCompliancePackContent } from "../config/compliancePackContent";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -53,6 +55,7 @@ function CheckItem({ label, checked, onChange, sub }) {
 }
 
 function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
+  const { pushToast } = useToast();
   const CPP_SECTIONS = pack.planSections;
   const DUTYHOLDER_CHECKS = pack.dutyholderChecks;
   const tabs = pack.tabs;
@@ -76,9 +79,15 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
   const [form, setForm] = useState(cdm?{...cdm}:blank);
   const [tab, setTab] = useState("project");
   const [validationError, setValidationError] = useState("");
+  const canSave = Boolean(String(form.projectTitle || "").trim());
   const persist = () => {
     const check = validateRequiredFields(form, ["projectTitle"], { projectTitle: "Project title" });
-    if (!check.ok) { setValidationError(check.message); setTab("project"); return; }
+    if (!check.ok) {
+      pushToast({ type: "warn", title: "Required fields", message: check.message });
+      setValidationError(check.message);
+      setTab("project");
+      return;
+    }
     setValidationError("");
     onSave({ ...form, projectTitle: form.projectTitle.trim() });
   };
@@ -350,7 +359,13 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
                   Issued RAMS, active/closed permits and linked records for this project ({hsFilePreview.total} item{hsFilePreview.total === 1 ? "" : "s"}). Export individual PDFs from each module for handover.
                 </p>
                 {hsFilePreview.total === 0 ? (
-                  <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>No issued documents yet — issue RAMS and permits to populate the file.</p>
+                  <EmptyState
+                    icon="📁"
+                    title="No issued documents yet"
+                    description="Issue RAMS and permits for this project to populate the Health & Safety File inventory."
+                    variant="dashed"
+                    compact
+                  />
                 ) : (
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
                     {hsFilePreview.items.slice(0, 12).map((it) => (
@@ -376,7 +391,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
             {tab!=="project"&&<button onClick={()=>setTab(tabs[tabs.findIndex(t=>t[0]===tab)-1][0])} style={ss.btn}>← Back</button>}
             {tab!=="preview"
               ?<button onClick={()=>setTab(tabs[tabs.findIndex(t=>t[0]===tab)+1][0])} style={ss.btnP}>Next →</button>
-              :<button onClick={persist} style={ss.btnO}>Save {pack.packNoun}</button>
+              :<button onClick={persist} disabled={!canSave} style={{ ...ss.btnO, opacity: canSave ? 1 : 0.4 }}>Save {pack.packNoun}</button>
             }
           </div>
         </div>
@@ -520,7 +535,7 @@ export default function CDMCompliance() {
         right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>{pack.newPackLabel}</button>}
       />
 
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="CDM compliance" />
 
       <RegisterModuleShell
         moduleId={pack.moduleId}

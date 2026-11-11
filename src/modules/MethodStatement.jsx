@@ -101,11 +101,18 @@ function StepEditor({ steps, setSteps }) {
   const applyTemplate = () => {
     if (!template) return;
     const tmplSteps = getMsStepTemplate(template);
-    const newSteps = tmplSteps.map((desc, i) => ({
-      id: genId(), seq: steps.length + i + 1,
-      title: desc.split(" ").slice(0,5).join(" ") + "…",
-      description: desc, responsible: "", duration: "",
-    }));
+    const newSteps = tmplSteps.map((desc, i) => {
+      const full = String(desc || "").trim();
+      const firstSentence = full.split(/(?<=[.!?])\s+/)[0] || full;
+      return {
+        id: genId(),
+        seq: steps.length + i + 1,
+        title: firstSentence,
+        description: full,
+        responsible: "",
+        duration: "",
+      };
+    });
     setSteps(prev => [...prev, ...newSteps]);
     setTemplate("");
   };
@@ -490,7 +497,7 @@ function MSForm({ ms, onSave, onClose }) {
               <div style={{ display:"flex", gap:6 }}>
                 <input value={newPlant} onChange={e=>setNewPlant(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addPlant()}
                   placeholder="Add plant item…" style={{ ...ss.inp, flex:1 }} />
-                <button onClick={addPlant} style={ss.btnP}>Add</button>
+                <button onClick={addPlant} style={{ ...ss.btnP, opacity: newPlant.trim() ? 1 : 0.55 }} disabled={!newPlant.trim()}>Add</button>
               </div>
             </div>
 
@@ -507,7 +514,7 @@ function MSForm({ ms, onSave, onClose }) {
               <div style={{ display:"flex", gap:6 }}>
                 <input value={newMat} onChange={e=>setNewMat(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addMat()}
                   placeholder="Add material…" style={{ ...ss.inp, flex:1 }} />
-                <button onClick={addMat} style={ss.btnP}>Add</button>
+                <button onClick={addMat} style={{ ...ss.btnP, opacity: newMat.trim() ? 1 : 0.55 }} disabled={!newMat.trim()}>Add</button>
               </div>
             </div>
 
@@ -574,7 +581,20 @@ function MSForm({ ms, onSave, onClose }) {
             {activeTab!=="preview" ? (
               <button onClick={()=>setActiveTab(tabs[tabs.findIndex(t=>t[0]===activeTab)+1][0])} style={ss.btnP}>Next →</button>
             ) : (
-              <button disabled={!valid} onClick={()=>onSave(form)} style={{ ...ss.btnO, opacity:valid?1:0.4 }}>Save method statement</button>
+              <>
+                {!valid ? (
+                  <p role="alert" style={{ margin: "0 8px 0 0", fontSize: 12, color: "#854F0B", alignSelf: "center" }}>
+                    {[
+                      !form.title?.trim() ? "title" : null,
+                      !form.location?.trim() ? "location" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" and ")
+                      .replace(/^(.+)$/, "Add $1 before saving.")}
+                  </p>
+                ) : null}
+                <button disabled={!valid} onClick={()=>onSave(form)} style={{ ...ss.btnO, opacity:valid?1:0.4 }}>Save method statement</button>
+              </>
             )}
           </div>
         </div>
@@ -916,12 +936,12 @@ export default function MethodStatement() {
           {listPg.visible(filtered).map((doc) => {
             const operatives = (doc.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
             return (
-              <div key={doc.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center", contentVisibility:"auto", containIntrinsicSize:"0 80px" }}
+              <div key={doc.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"flex-start", contentVisibility:"auto", containIntrinsicSize:"0 80px" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor="#f97316"}
                 onMouseLeave={e=>e.currentTarget.style.borderColor="var(--color-border-tertiary,#e5e5e5)"}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-                    <span style={{ fontWeight:500, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{doc.title}</span>
+                  <div style={{ display:"flex", gap:8, alignItems:"flex-start", marginBottom:4, flexWrap:"wrap" }}>
+                    <span style={{ fontWeight:500, fontSize:14, lineHeight:1.35, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", overflowWrap:"anywhere" }} title={doc.title}>{doc.title}</span>
                     <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:500, flexShrink:0,
                       background:doc.status==="approved"?"#EAF3DE":doc.status==="superseded"?"#f7f7f5":"#FAEEDA",
                       color:doc.status==="approved"?"#27500A":doc.status==="superseded"?"#888":"#633806" }}>

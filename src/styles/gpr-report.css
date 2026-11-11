@@ -452,6 +452,10 @@
   border-radius: 8px;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .app-gpr-smart-tip--info {
@@ -552,6 +556,8 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .app-gpr-insight-card__action {

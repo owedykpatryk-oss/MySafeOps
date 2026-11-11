@@ -173,9 +173,7 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
                 </p>
               ) : null}
               {env.moistureImpactOnGpr ? (
-                <p className="app-gpr-insight-card__impact">{env.moistureImpactOnGpr.slice(0, 220)}
-                  {env.moistureImpactOnGpr.length > 220 ? "…" : ""}
-                </p>
+                <p className="app-gpr-insight-card__impact">{env.moistureImpactOnGpr}</p>
               ) : null}
             </>
           ) : (

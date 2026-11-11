@@ -14,7 +14,9 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const KEY = "ghp_register";
@@ -23,6 +25,7 @@ const ss = ms;
 
 function Form({ item, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -38,6 +41,7 @@ function Form({ item, onSave, onClose }) {
       }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const canSave = Boolean(String(form.itemDescription || "").trim() && String(form.dateIn || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -66,7 +70,24 @@ function Form({ item, onSave, onClose }) {
         ) : null}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
-          <button type="button" style={ss.btnP} onClick={() => onSave(form)}>Save</button>
+          <button
+            type="button"
+            style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }}
+            disabled={!canSave}
+            onClick={() => {
+              const check = validateRequiredFields(form, ["itemDescription", "dateIn"], {
+                itemDescription: "Item description",
+                dateIn: "Date in",
+              });
+              if (!check.ok) {
+                pushToast({ type: "warn", title: "Required fields", message: check.message });
+                return;
+              }
+              onSave(form);
+            }}
+          >
+            Save
+          </button>
         </div>
       </div>
     </ModuleOverlay>
@@ -106,7 +127,7 @@ export default function GlassHardPlasticRegister() {
           </button>
         }
       />
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="glass & hard plastic" />
       <RegisterModuleShell moduleId="ghp-register" smartContext={{ items: liveItems }} stats={buildRegisterModuleStats("ghp-register", liveItems)}>
         {liveItems.length === 0 ? (
           <EmptyState

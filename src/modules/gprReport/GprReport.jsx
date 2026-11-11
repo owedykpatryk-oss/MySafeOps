@@ -2929,7 +2929,11 @@ function ScopedGprReport({ scope }) {
           {!simpleMode && smartTips.length ? (
             <div className="app-gpr-smart-tips">
               {smartTips.slice(0, 2).map((tip, i) => (
-                <div key={i} className={`app-gpr-smart-tip app-gpr-smart-tip--${tip.level}`}>
+                <div
+                  key={i}
+                  className={`app-gpr-smart-tip app-gpr-smart-tip--${tip.level}`}
+                  title={tip.text}
+                >
                   {tip.text}
                 </div>
               ))}

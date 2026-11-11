@@ -19,6 +19,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useToast } from "../context/ToastContext";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `vis_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -28,6 +29,7 @@ const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
+  const { pushToast } = useToast();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -47,13 +49,14 @@ function Form({ item, projects, onSave, onClose }) {
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const canSave = Boolean(String(form.visitorName || "").trim() && String(form.visitDate || "").trim());
 
   return (
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 540 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit visitor" : "Visitor sign-in"}</h2>
         <label style={ss.lbl} htmlFor="visitor-visitor-name">Visitor name</label>
-        <input style={ss.inp} value={form.visitorName} onChange={(e) => set("visitorName", e.target.value)}  id="visitor-visitor-name" />
+        <input style={ss.inp} value={form.visitorName} onChange={(e) => set("visitorName", e.target.value)} placeholder="Full name"  id="visitor-visitor-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-company">Company</label>
         <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)}  id="visitor-company" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-vehicle-reg">Vehicle registration</label>
@@ -89,10 +92,10 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             {t("cancel")}
           </button>
-          <button type="button" style={ss.btnP} onClick={() => {
+          <button type="button" style={{ ...ss.btnP, opacity: canSave ? 1 : 0.4 }} disabled={!canSave} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
             const check = validateRequiredFields(payload, ["visitorName","visitDate"], { visitorName: "Visitor name", visitDate: "Visit date" });
-            if (!check.ok) { window.alert(check.message); return; }
+            if (!check.ok) { pushToast({ type: "warn", title: "Required fields", message: check.message }); return; }
             onSave(payload);
           }}>
             {t("save")}

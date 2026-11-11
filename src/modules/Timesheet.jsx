@@ -13,6 +13,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 import { localDateISO, localMonthISO } from "../utils/localDate";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { notifyAppToast } from "../utils/htmlEscape.js";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "mysafeops_timesheets";
@@ -326,7 +327,7 @@ function SortTh({ id, label, sortKey, sortAsc, onSort }) {
   return (
     <th key={id} style={{
       padding:"10px 12px", textAlign:"left",
-      fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+      fontSize:11, fontWeight:600, color:"#475569",
       borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
       whiteSpace:"nowrap",
       letterSpacing:"0.02em",
@@ -539,16 +540,27 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
               </button>
             )}
           </div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+            {(!form.workerId || !form.projectId || tot <= 0) ? (
+              <p role="alert" style={{ margin: 0, fontSize: 12, color: "#854F0B", flex: "1 1 160px" }}>
+                {[
+                  !form.workerId ? "Select a worker" : null,
+                  !form.projectId ? "Select a project" : null,
+                  tot <= 0 ? "Enter hours greater than zero" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : null}
             <button onClick={onClose} style={btnStyle}>{t("cancel")}</button>
             <button
               onClick={() => onSave({
                 ...form,
                 rejectReason: form.status === "rejected" ? String(form.rejectReason || "").trim() : "",
               })}
-              disabled={!form.workerId || !form.projectId}
+              disabled={!form.workerId || !form.projectId || tot <= 0}
               style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041",
-                opacity: (!form.workerId||!form.projectId) ? 0.5 : 1 }}
+                opacity: (!form.workerId || !form.projectId || tot <= 0) ? 0.5 : 1 }}
             >
               {t("saveEntry")}
             </button>
@@ -622,7 +634,7 @@ function ManagePanel({ type, items, onSave, onClose }) {
             placeholder={type === "workers" ? t("addNewWorker") : t("addNewProject")}
             style={{ ...inputStyle, flex:1 }}
           />
-          <button onClick={add} style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041" }}>
+          <button onClick={add} disabled={!newName.trim()} style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041", opacity: newName.trim() ? 1 : 0.5 }}>
             {t("add")}
           </button>
         </div>
@@ -784,6 +796,11 @@ export default function Timesheet() {
   const refreshRosterFromStorage = () => {
     setWorkers(load(WORKERS_KEY));
     setProjects(load(PROJECTS_KEY));
+    notifyAppToast({
+      type: "success",
+      title: "Lists updated",
+      message: "Worker and project lists refreshed from storage.",
+    });
   };
 
   const handleSortColumn = (key) => {
@@ -921,7 +938,7 @@ export default function Timesheet() {
         }
       />
 
-      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="timesheets" />
 
       <RegisterModuleShell
         moduleId="timesheets"
@@ -1256,7 +1273,7 @@ export default function Timesheet() {
                   <SortTh id="task" label={t("task")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
                   <th style={{
                     padding:"10px 12px", textAlign:"left",
-                    fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+                    fontSize:11, fontWeight:600, color:"#475569",
                     borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
                     letterSpacing:"0.02em",
                     background:"#ecefec",
@@ -1265,7 +1282,7 @@ export default function Timesheet() {
                   <SortTh id="status" label={t("status")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
                   <th style={{
                     padding:"10px 12px", textAlign:"left", width:1,
-                    fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+                    fontSize:11, fontWeight:600, color:"#475569",
                     borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
                     background:"#ecefec",
                   }} aria-label="Actions" />
@@ -1475,7 +1492,11 @@ export default function Timesheet() {
               onClick={() => {
                 const monthEntries = entriesInCalendarMonth(entries, exportMonth);
                 if (!monthEntries.length) {
-                  if (typeof window !== "undefined") window.alert("No timesheet weeks in that month.");
+                  notifyAppToast({
+                    type: "info",
+                    title: "No weeks",
+                    message: "No timesheet weeks in that month.",
+                  });
                   return;
                 }
                 exportCSV(monthEntries, workers, projects, `month_${exportMonth}`);

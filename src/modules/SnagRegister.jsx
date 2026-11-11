@@ -340,6 +340,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
             onChange={(e) => set("dueDate", e.target.value)}
             style={{ ...ss.inp, width: "auto" }}
            id="snag-due-date" />
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--color-text-secondary)" }}>Select due date</p>
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -452,22 +453,36 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
           </div>
 
           <div
+            title={snag.title || undefined}
             style={{
               fontWeight: 500,
               fontSize: 14,
               marginBottom: 4,
               overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              whiteSpace: "normal",
+              overflowWrap: "anywhere",
+              lineHeight: 1.35,
             }}
           >
             {snag.title}
           </div>
 
           {snag.description && (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6, lineHeight: 1.5 }}>
-              {snag.description.slice(0, 120)}
-              {snag.description.length > 120 ? "…" : ""}
+            <div
+              title={snag.description}
+              style={{
+                fontSize: 12,
+                color: "var(--color-text-secondary)",
+                marginBottom: 6,
+                lineHeight: 1.5,
+                whiteSpace: "normal",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {snag.description}
             </div>
           )}
 
