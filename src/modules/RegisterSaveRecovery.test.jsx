@@ -7,6 +7,7 @@ import InspectionTracker from "./InspectionTracker";
 import SnagRegister from "./SnagRegister";
 import DailyBriefing from "./DailyBriefing";
 import IncidentNearMiss from "./IncidentNearMiss";
+import { ToastProvider } from "../context/ToastContext";
 import { overlayDraftKey } from "../hooks/useOverlayFormDraft";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,7 +27,7 @@ beforeEach(() => {
 });
 
 it("keeps the quick incident fields and draft after a failed save", async () => {
-  await act(async () => root.render(<IncidentNearMiss />));
+  await act(async () => root.render(<ToastProvider><IncidentNearMiss /></ToastProvider>));
   const input = host.querySelector('input[placeholder="Location / area"]');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "North depot");

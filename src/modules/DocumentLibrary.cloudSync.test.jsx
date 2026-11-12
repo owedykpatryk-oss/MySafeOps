@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import DocumentLibrary from "./DocumentLibrary";
+import { ToastProvider } from "../context/ToastContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), upload: vi.fn(), rows: new Map(), country: null }));
@@ -51,7 +52,7 @@ async function renderLibrary() {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => root.render(<DocumentLibrary />));
+  await act(async () => root.render(<ToastProvider><DocumentLibrary /></ToastProvider>));
 }
 
 it("loads a document written on another device and syncs a new library entry", async () => {

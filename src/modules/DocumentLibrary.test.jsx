@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DocumentLibrary from "./DocumentLibrary";
+import { ToastProvider } from "../context/ToastContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const mocks = vi.hoisted(() => ({ upload: vi.fn(), download: vi.fn(), save: vi.fn(), rows: new Map(), scope: "test-org" }));
@@ -35,7 +36,7 @@ async function renderLibrary() {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => root.render(<DocumentLibrary />));
+  await act(async () => root.render(<ToastProvider><DocumentLibrary /></ToastProvider>));
 }
 const button = (name) => [...host.querySelectorAll("button")].find((entry) => entry.textContent === name);
 async function changeWorkspace(scope, event = "mysafeops-org-changed") {

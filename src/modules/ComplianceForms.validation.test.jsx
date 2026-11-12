@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import CDMCompliance from "./CDMCompliance";
 import RIDDORWizard from "./RIDDORWizard";
+import { ToastProvider } from "../context/ToastContext";
 import { getCompliancePackContent } from "../config/compliancePackContent";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,20 +39,25 @@ async function failThenRetrySave(key, label) {
   await click(label);
 }
 it("blocks a blank or whitespace CDM title even when jumping directly to Preview", async () => {
-  await act(async () => root.render(<CDMCompliance />));
+  await act(async () => root.render(<ToastProvider><CDMCompliance /></ToastProvider>));
   await click("+ New CDM pack");
   await fill("cdm-compliance-project-title", "  ");
-  const preview = getCompliancePackContent("UK").tabs.find(([key]) => key === "preview")[1];
-  await click(preview); await click("Save CDM pack");
+  const tabs = getCompliancePackContent("UK").tabs;
+  const project = tabs.find(([key]) => key === "project")[1];
+  const preview = tabs.find(([key]) => key === "preview")[1];
+  await click(preview);
+  const blankSave = [...host.querySelectorAll("button")].find((el) => el.textContent.trim() === "Save CDM pack");
+  expect(blankSave?.disabled).toBe(true);
   expect(rows("cdm_packs")).toEqual([]);
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("required");
+  await click(project);
   await fill("cdm-compliance-project-title", "  North depot  ");
-  await click(preview); await failThenRetrySave("cdm_packs", "Save CDM pack");
+  await click(preview);
+  await failThenRetrySave("cdm_packs", "Save CDM pack");
   expect(rows("cdm_packs")).toHaveLength(1);
   expect(rows("cdm_packs")[0].projectTitle).toBe("North depot");
 });
 it("requires the incident details before leaving that step and saves the corrected record", async () => {
-  await act(async () => root.render(<RIDDORWizard />));
+  await act(async () => root.render(<ToastProvider><RIDDORWizard /></ToastProvider>));
   await click("+ New RIDDOR report"); await click("Next →"); await click("Next →");
   expect(host.querySelector("#riddor-location")).not.toBeNull();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("required");

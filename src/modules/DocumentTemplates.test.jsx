@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DocumentTemplates, { templatePayloadFromDocument } from "./DocumentTemplates";
+import { ToastProvider } from "../context/ToastContext";
 import { setOrgId } from "../utils/orgStorage";
 
 vi.mock("../components/PageHero", () => ({ default: () => null }));
@@ -44,7 +45,7 @@ describe("DocumentTemplates workspace storage", () => {
       return setItem.call(this, key, value);
     });
 
-    await act(async () => root.render(<DocumentTemplates />));
+    await act(async () => root.render(<ToastProvider><DocumentTemplates /></ToastProvider>));
     expect(container.textContent).toContain("Company A template");
     expect(templateWrites).toEqual([]);
 
@@ -63,7 +64,7 @@ describe("DocumentTemplates workspace storage", () => {
         permitControllerSignDate: "2026-09-01", operativeSignatures: { worker: { imageDataUrl: "old-signature" } },
       },
     }]));
-    await act(async () => root.render(<DocumentTemplates />));
+    await act(async () => root.render(<ToastProvider><DocumentTemplates /></ToastProvider>));
     const cloneButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "Clone to new draft");
     await act(async () => cloneButton.click());
     const copy = JSON.parse(localStorage.getItem("method_statements_company-a"))[0];
