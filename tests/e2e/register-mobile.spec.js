@@ -552,7 +552,7 @@ test("photo library, camera picker and reload preserve local evidence without GP
     await dialog.locator("textarea").first().fill(camera ? "Camera evidence" : "Library evidence");
     await dialog.getByRole("button", { name: "Save geo-photo", exact: true }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByText("Geo-photo saved successfully.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Photo saved", { exact: true })).toBeVisible();
   }
   await page.reload();
   await expect(page.getByText("Camera evidence", { exact: true }).first()).toBeVisible();
@@ -596,7 +596,7 @@ test("unreadable HEIC shows recovery advice and a replacement photo can be saved
   await dialog.locator("textarea").first().fill("Replacement evidence");
   await dialog.getByRole("button", { name: "Save geo-photo", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText("Geo-photo saved successfully.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Photo saved", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByText("Replacement evidence", { exact: true }).first()).toBeVisible({ timeout: 15000 });
 });
