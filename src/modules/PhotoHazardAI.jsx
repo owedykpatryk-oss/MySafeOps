@@ -30,10 +30,10 @@ export default function PhotoHazardAI() {
       const mediaType = m[1];
       const base64 = m[2];
       const text = await anthropicVision({
+        promptId: "photo_hazard",
         base64,
         mediaType,
-        prompt:
-          "You are a UK construction safety observer. List visible hazards and practical controls (bullet list). Note limitations: photo may not show full context. British English.",
+        prompt: "Analyse this site photo for visible hazards and practical controls.",
       });
       setOut(text);
       pushAudit({ action: "ai_photo_hazard", entity: "claude", detail: "ok" });

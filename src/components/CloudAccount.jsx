@@ -41,12 +41,15 @@ const teal = "#0d9488";
 const SUPPORT_EMAIL = getSupportEmail();
 const SHOW_ADMIN_LOGIN_HINTS = showAdminLoginHints();
 
-function mapAuthErrorMessage(error, fallback = "Authentication request failed") {
+const SIGNUP_GENERIC_SUCCESS =
+  "If this email can be used, we sent a confirmation link. Check inbox and spam, or try Sign in.";
+
+function mapAuthErrorMessage(error, fallback = "Authentication request failed", { antiEnumerate = false } = {}) {
   const raw = String(error?.message || "").trim();
   const m = raw.toLowerCase();
   if (!raw) return fallback;
   if (m.includes("user already registered") || m.includes("already registered") || m.includes("already exists")) {
-    return "An account with this email already exists. Try Sign in.";
+    return antiEnumerate ? SIGNUP_GENERIC_SUCCESS : "An account with this email already exists. Try Sign in.";
   }
   if (m.includes("invalid login credentials")) return "Invalid email or password.";
   if (m.includes("invalid email")) return "Email address format is invalid.";
@@ -246,6 +249,7 @@ export default function CloudAccount() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
+  const [confirmAge16, setConfirmAge16] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [honeypot, setHoneypot] = useState("");
   const [mfaForSession, setMfaForSession] = useState(false);
@@ -476,6 +480,10 @@ export default function CloudAccount() {
       setMsg("Please confirm you have read the terms of service and privacy policy.");
       return;
     }
+    if (!confirmAge16) {
+      setMsg("Please confirm you are 16 or over.");
+      return;
+    }
     if (password.length < MIN_PASSWORD_LENGTH) {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
@@ -525,7 +533,7 @@ export default function CloudAccount() {
       setMsg("Account created. Confirmation email sent — check inbox and spam, open the link, then sign in.");
       setPassword("");
     } catch (e) {
-      setMsg(mapAuthErrorMessage(e, "Sign-up failed"));
+      setMsg(mapAuthErrorMessage(e, SIGNUP_GENERIC_SUCCESS, { antiEnumerate: true }));
       resetCaptcha();
     } finally {
       setBusy(false);
@@ -855,36 +863,60 @@ export default function CloudAccount() {
           </div>
         </div>
       )}
-      {creatingAccount && <label
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 10,
-          marginTop: 14,
-          fontSize: 12,
-          lineHeight: 1.5,
-          color: "var(--color-text-secondary)",
-          cursor: "pointer",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={acceptLegalTerms}
-          onChange={(e) => setAcceptLegalTerms(e.target.checked)}
-          style={{ marginTop: 2 }}
-        />
-        <span>
-          I have read and agree to the{" "}
-          <Link to="/terms" style={{ color: teal, fontWeight: 600 }}>
-            Terms of service
-          </Link>{" "}
-          and{" "}
-          <Link to="/privacy" style={{ color: teal, fontWeight: 600 }}>
-            Privacy policy
-          </Link>
-          .
-        </span>
-      </label>}
+      {creatingAccount && (
+        <>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              marginTop: 14,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "var(--color-text-secondary)",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={acceptLegalTerms}
+              onChange={(e) => setAcceptLegalTerms(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              I have read and agree to the{" "}
+              <Link to="/terms" style={{ color: teal, fontWeight: 600 }}>
+                Terms of service
+              </Link>{" "}
+              and{" "}
+              <Link to="/privacy" style={{ color: teal, fontWeight: 600 }}>
+                Privacy policy
+              </Link>
+              .
+            </span>
+          </label>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              marginTop: 10,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "var(--color-text-secondary)",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={confirmAge16}
+              onChange={(e) => setConfirmAge16(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>I confirm I am 16 or over.</span>
+          </label>
+        </>
+      )}
       <input
         type="text"
         name="company"
@@ -940,6 +972,7 @@ export default function CloudAccount() {
               ? () => {
                   setCreatingAccount(false);
                   setAcceptLegalTerms(false);
+                  setConfirmAge16(false);
                   setMsg("");
                 }
               : signIn
@@ -947,7 +980,7 @@ export default function CloudAccount() {
         >
           {creatingAccount ? "Back to sign in" : "Sign in"}
         </button>
-        <button type="button" style={ss.btn} disabled={busy || (creatingAccount && (!acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit))} onClick={creatingAccount ? signUp : () => { setCreatingAccount(true); setMsg(""); }}>
+        <button type="button" style={ss.btn} disabled={busy || (creatingAccount && (!acceptLegalTerms || !confirmAge16 || signUpThrottle.isThrottled || captchaBlocksSubmit))} onClick={creatingAccount ? signUp : () => { setCreatingAccount(true); setMsg(""); }}>
           Create account
         </button>
       </div>

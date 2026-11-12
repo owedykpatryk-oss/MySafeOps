@@ -6,6 +6,7 @@
  */
 
 import { supabase } from "../lib/supabase.js";
+import { resolveAiSystemPrompt } from "../../shared/aiPromptTemplates.mjs";
 import { appApiUrl } from "./appApiUrl";
 import { isNativeApp } from "./appRuntime";
 
@@ -26,6 +27,7 @@ const PROXY_ERROR_MESSAGES = {
   forbidden_origin: "AI proxy rejected this request (origin check failed).",
   invalid_json: "AI proxy received invalid JSON.",
   invalid_body: "AI proxy rejected the request body.",
+  unknown_prompt: "AI proxy rejected an unknown prompt template.",
   payload_too_large: "AI request is too large for the proxy.",
   upstream_unreachable: "Could not reach Anthropic from the server. Try again shortly.",
   method_not_allowed: "AI proxy method not allowed.",
@@ -182,22 +184,48 @@ async function postAnthropicMessagesBody(body) {
   return json;
 }
 
-export async function anthropicMessages({ system, messages, maxTokens = 4096 }) {
-  const json = await postAnthropicMessagesBody({
+/**
+ * @param {{
+ *   promptId: string;
+ *   marketId?: string;
+ *   system?: string;
+ *   messages: unknown[];
+ *   maxTokens?: number;
+ * }} opts
+ * When the same-origin proxy is configured, only `promptId` (+ optional marketId) is sent;
+ * the server pins the system prompt. Direct API-key mode (dev) uses `system` locally.
+ */
+export async function anthropicMessages({ promptId, marketId = "uk", system, messages, maxTokens = 4096 }) {
+  const useProxy = isAnthropicProxyConfigured();
+  const pinned = promptId ? resolveAiSystemPrompt(promptId, marketId) : null;
+  const body = {
     model: getAnthropicModel(),
     max_tokens: maxTokens,
-    system: system || undefined,
     messages,
-  });
+  };
+  if (useProxy) {
+    if (!promptId || !pinned) {
+      throw new Error(PROXY_ERROR_MESSAGES.unknown_prompt);
+    }
+    body.promptId = promptId;
+    body.marketId = marketId;
+  } else {
+    body.system = pinned || system || undefined;
+  }
+  const json = await postAnthropicMessagesBody(body);
   const block = json?.content?.find((c) => c.type === "text");
   return block?.text || "";
 }
 
 /**
  * Vision + text (single user message with image block).
+ * @param {{ promptId?: string; prompt?: string; base64: string; mediaType: string }} opts
  */
-export async function anthropicVision({ prompt, base64, mediaType }) {
-  const json = await postAnthropicMessagesBody({
+export async function anthropicVision({ promptId = "photo_hazard", prompt, base64, mediaType }) {
+  const useProxy = isAnthropicProxyConfigured();
+  const pinned = resolveAiSystemPrompt(promptId);
+  const userText = prompt || "Analyse this site photo for visible hazards and practical controls.";
+  const body = {
     model: getAnthropicModel(),
     max_tokens: 2048,
     messages: [
@@ -205,11 +233,18 @@ export async function anthropicVision({ prompt, base64, mediaType }) {
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: prompt },
+          { type: "text", text: userText },
         ],
       },
     ],
-  });
+  };
+  if (useProxy) {
+    if (!pinned) throw new Error(PROXY_ERROR_MESSAGES.unknown_prompt);
+    body.promptId = promptId;
+  } else {
+    body.system = pinned || undefined;
+  }
+  const json = await postAnthropicMessagesBody(body);
   const block = json?.content?.find((c) => c.type === "text");
   return block?.text || "";
 }

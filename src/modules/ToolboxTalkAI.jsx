@@ -22,8 +22,7 @@ export default function ToolboxTalkAI() {
     setOut("");
     try {
       const text = await anthropicMessages({
-        system:
-          "You write short UK site toolbox talks (5–7 bullet points, plain English, no jargon). Include one UK regulation reference where relevant. No JSON.",
+        promptId: "toolbox_talk",
         messages: [{ role: "user", content: `Toolbox talk topic: ${topic.trim()}` }],
         maxTokens: 1024,
       });

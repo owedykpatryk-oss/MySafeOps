@@ -1038,11 +1038,7 @@ export async function generateAiSurveyDraft(report) {
   };
 
   const text = await anthropicMessages({
-    system: `You draft UK construction/surveying report prose for MySafeOps. Write in professional British English, PAS128-aware where relevant. No markdown headings. Return exactly four labelled paragraphs:
-EXECUTIVE SUMMARY:
-SCOPE NOTE:
-FINDINGS DRAFT:
-RECOMMENDATIONS:`,
+    promptId: "survey_prose",
     messages: [{ role: "user", content: `Improve and complete these survey report sections from structured field data:\n${JSON.stringify(payload, null, 2)}` }],
     maxTokens: 1800,
   });
