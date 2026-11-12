@@ -28,6 +28,7 @@
  *   cookiesPath: string;
  *   dpaPath: string;
  *   accessibilityPath: string;
+ *   refundsPath: string;
  *   impressumPath?: string; // legally required site-notice page (e.g. DE §5 DDG) — only markets that require one set this
  *   loginPath: string;
  *   alternateMarketId: MarketId; // primary switcher hint only — use getAlternateMarkets() for hreflang
@@ -50,6 +51,7 @@ export const MARKETS = {
     cookiesPath: "/cookies",
     dpaPath: "/dpa",
     accessibilityPath: "/accessibility",
+    refundsPath: "/refunds",
     loginPath: "/login",
     alternateMarketId: "au",
     legislationLibraryId: "uk",
@@ -68,6 +70,7 @@ export const MARKETS = {
     cookiesPath: "/au/cookies",
     dpaPath: "/au/dpa",
     accessibilityPath: "/au/accessibility",
+    refundsPath: "/refunds",
     loginPath: "/login?market=au",
     alternateMarketId: "uk",
     legislationLibraryId: "au",
@@ -86,6 +89,7 @@ export const MARKETS = {
     cookiesPath: "/pl/cookies",
     dpaPath: "/pl/dpa",
     accessibilityPath: "/pl/accessibility",
+    refundsPath: "/refunds",
     loginPath: "/login?market=pl",
     alternateMarketId: "uk",
     legislationLibraryId: "pl",
@@ -104,6 +108,7 @@ export const MARKETS = {
     cookiesPath: "/de/cookies",
     dpaPath: "/de/dpa",
     accessibilityPath: "/de/accessibility",
+    refundsPath: "/refunds",
     impressumPath: "/de/impressum",
     loginPath: "/login?market=de",
     alternateMarketId: "uk",
@@ -123,6 +128,7 @@ export const MARKETS = {
     cookiesPath: "/at/cookies",
     dpaPath: "/at/dpa",
     accessibilityPath: "/at/accessibility",
+    refundsPath: "/refunds",
     loginPath: "/login?market=at",
     alternateMarketId: "de",
     legislationLibraryId: "at",
@@ -141,6 +147,7 @@ export const MARKETS = {
     cookiesPath: "/ch/cookies",
     dpaPath: "/ch/dpa",
     accessibilityPath: "/ch/accessibility",
+    refundsPath: "/refunds",
     loginPath: "/login?market=ch",
     alternateMarketId: "de",
     legislationLibraryId: "ch",

@@ -45,12 +45,15 @@ it("shows password guidance and legal consent only for account creation", async 
 
   await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Create account").click());
   expect(host.querySelector(".login-legal-checkbox")).not.toBeNull();
+  expect(host.querySelector(".login-age-checkbox")).not.toBeNull();
   expect(password.autocomplete).toBe("new-password");
   expect(host.textContent).toContain("Password strength");
   expect(host.textContent).toContain("Create your MySafeOps account");
   const createButton = [...host.querySelectorAll("button")].find((button) => button.textContent === "Create account");
   expect(createButton.disabled).toBe(true);
   await act(async () => host.querySelector(".login-legal-checkbox input").click());
+  expect(createButton.disabled).toBe(true);
+  await act(async () => host.querySelector(".login-age-checkbox input").click());
   expect(createButton.disabled).toBe(false);
 
   await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Back to sign in").click());

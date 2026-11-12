@@ -42,6 +42,12 @@ export default function LegalPage({ docKey, marketId = "uk" }) {
       pageTitle: `Impressum — MySafeOps (${market.label})`,
       iframeSrc: legalDocIframeSrc(market.id, "impressum.html"),
     },
+    refunds: {
+      title: "Refunds & cancellation",
+      pageTitle: "Refunds & cancellation — MySafeOps",
+      // Shared UK English summary for all markets (binding detail remains in Terms).
+      iframeSrc: "/legal/refunds.html",
+    },
   };
 
   const meta = DOCS[docKey];

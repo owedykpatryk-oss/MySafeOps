@@ -65,7 +65,7 @@ export const LANDING_MARKET_CONTENT = {
       ["RIDDOR", "Support timely internal reporting workflows — follow HSE guidance for statutory reporting."],
     ],
     pricingFootnote:
-      "Includes a 14-day evaluation in-product when you sign in (optional +14 day extension once). After trial, subscribe to keep editing — existing data stays viewable and exportable. Not legal advice — always follow your site rules and UK requirements.",
+      "Includes a 14-day evaluation in-product when you sign in (optional +14 day extension once). After trial, subscribe to keep editing — existing data stays viewable and exportable. Prices in GBP ex VAT unless stated. Not legal advice — always follow your site rules and UK requirements.",
     pricingDisclaimer: "Terms §7.5",
     incidentFeature: "Near misses, injuries, RIDDOR paths. Capture evidence fast and keep follow-up visible.",
     faqLegalRef: "HSE reporting",

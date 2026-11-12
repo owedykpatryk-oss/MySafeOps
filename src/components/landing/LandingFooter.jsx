@@ -25,6 +25,9 @@ export default function LandingFooter({ supportEmail, market = getMarket("uk"), 
               <span style={{ color: "var(--org)" }}>Ops</span>
             </div>
             <p>{footerCopy.footerBlurb}</p>
+            <p style={{ fontSize: 13, marginTop: 12, opacity: 0.85, lineHeight: 1.55 }}>
+              {labels.operatorLine}
+            </p>
             <p style={{ fontSize: 13, marginTop: 12, opacity: 0.85 }}>
               {labels.region} <strong>{market.flag} {market.label}</strong>
               {alternateMarkets.map((alt) => (
@@ -92,6 +95,9 @@ export default function LandingFooter({ supportEmail, market = getMarket("uk"), 
               </li>
               <li>
                 <Link to={market.termsPath}>{labels.terms}</Link>
+              </li>
+              <li>
+                <Link to={market.refundsPath}>{labels.refunds}</Link>
               </li>
               <li>
                 <Link to={market.cookiesPath}>{labels.cookies}</Link>

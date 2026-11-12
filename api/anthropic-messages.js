@@ -18,10 +18,11 @@ import {
   timingSafeEqual,
 } from "./securityUtils.js";
 import { parseBearerToken, verifySupabaseAccessToken } from "./verifySupabaseAuth.js";
+import { resolveAiSystemPrompt } from "../shared/aiPromptTemplates.mjs";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MAX_JSON_BYTES = 512_000;
-const ALLOWED_BODY_KEYS = new Set(["model", "max_tokens", "system", "messages"]);
+const ALLOWED_BODY_KEYS = new Set(["model", "max_tokens", "messages"]);
 
 function pickAnthropicBody(obj) {
   if (!obj || typeof obj !== "object") return {};
@@ -122,10 +123,19 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { error: "invalid_json" });
   }
 
+  const promptId = typeof parsed?.promptId === "string" ? parsed.promptId : "";
+  const marketId = typeof parsed?.marketId === "string" ? parsed.marketId : "uk";
+  const system = resolveAiSystemPrompt(promptId, marketId);
+  if (!system) {
+    return sendJson(res, 400, { error: "unknown_prompt" });
+  }
+
   const body = clampAnthropicBody(pickAnthropicBody(parsed));
   if (!body) {
     return sendJson(res, 400, { error: "invalid_body" });
   }
+  // Never trust a client-supplied system prompt — always pin from promptId.
+  body.system = system;
 
   const anthropicVersion = normalizeAnthropicVersion(req.headers["anthropic-version"]);
 

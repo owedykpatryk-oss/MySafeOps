@@ -92,6 +92,7 @@ export default function App() {
           <Route path="/cookies" element={<LegalPage docKey="cookies" />} />
           <Route path="/dpa" element={<LegalPage docKey="dpa" />} />
           <Route path="/accessibility" element={<LegalPage docKey="accessibility" />} />
+          <Route path="/refunds" element={<LegalPage docKey="refunds" />} />
           <Route path="/au/privacy" element={<LegalPage docKey="privacy" marketId="au" />} />
           <Route path="/au/terms" element={<LegalPage docKey="terms" marketId="au" />} />
           <Route path="/au/cookies" element={<LegalPage docKey="cookies" marketId="au" />} />

@@ -73,12 +73,18 @@ function LoginBrand() {
   );
 }
 
-function mapAuthErrorMessage(error, fallback = "Authentication request failed") {
+/** Generic copy for signup/reset — avoids confirming whether an email is registered. */
+const SIGNUP_GENERIC_SUCCESS =
+  "If this email can be used, we sent a confirmation link. Check inbox and spam, or try Sign in / Forgot password.";
+
+function mapAuthErrorMessage(error, fallback = "Authentication request failed", { antiEnumerate = false } = {}) {
   const raw = String(error?.message || "").trim();
   const m = raw.toLowerCase();
   if (!raw) return fallback;
   if (m.includes("user already registered") || m.includes("already registered") || m.includes("already exists")) {
-    return "An account with this email already exists. Try Sign in or Forgot password.";
+    return antiEnumerate
+      ? SIGNUP_GENERIC_SUCCESS
+      : "An account with this email already exists. Try Sign in or Forgot password.";
   }
   if (m.includes("invalid login credentials")) {
     return "Invalid email or password.";
@@ -117,6 +123,7 @@ export default function LoginPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
+  const [confirmAge16, setConfirmAge16] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [, setTick] = useState(0);
   const inviteToken = searchParams.get("invite") || "";
@@ -346,6 +353,10 @@ export default function LoginPage() {
       setMsg("Please confirm you have read the terms of service and privacy policy.");
       return;
     }
+    if (!confirmAge16) {
+      setMsg("Please confirm you are 16 or over.");
+      return;
+    }
     if (password.length < MIN_PASSWORD_LENGTH) {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
@@ -399,7 +410,7 @@ export default function LoginPage() {
       setPassword("");
     } catch (e) {
       trackAuthError("sign_up_failed", e, { email: normalizedEmail });
-      setMsg(mapAuthErrorMessage(e, "Sign-up failed"));
+      setMsg(mapAuthErrorMessage(e, SIGNUP_GENERIC_SUCCESS, { antiEnumerate: true }));
       resetCaptcha();
     } finally {
       setBusy(false);
@@ -820,39 +831,65 @@ export default function LoginPage() {
                   </div>
                 </div>
               )}
-              {creatingAccount && <label
-                className="login-legal-checkbox"
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  marginTop: 14,
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: "var(--color-text-secondary)",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={acceptLegalTerms}
-                  onChange={(e) => setAcceptLegalTerms(e.target.checked)}
-                  style={{ marginTop: 2 }}
-                  aria-label="I agree to the Terms of service and Privacy policy"
-                  aria-describedby="login-legal-hint"
-                />
-                <span id="login-legal-hint">
-                  I have read and agree to the{" "}
-                  <Link to={signupMarket.termsPath} style={{ color: teal, fontWeight: 600 }}>
-                    Terms of service
-                  </Link>{" "}
-                  and{" "}
-                  <Link to={signupMarket.privacyPath} style={{ color: teal, fontWeight: 600 }}>
-                    Privacy policy
-                  </Link>
-                  .
-                </span>
-              </label>}
+              {creatingAccount && (
+                <>
+                  <label
+                    className="login-legal-checkbox"
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      marginTop: 14,
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      color: "var(--color-text-secondary)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={acceptLegalTerms}
+                      onChange={(e) => setAcceptLegalTerms(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                      aria-label="I agree to the Terms of service and Privacy policy"
+                      aria-describedby="login-legal-hint"
+                    />
+                    <span id="login-legal-hint">
+                      I have read and agree to the{" "}
+                      <Link to={signupMarket.termsPath} style={{ color: teal, fontWeight: 600 }}>
+                        Terms of service
+                      </Link>{" "}
+                      and{" "}
+                      <Link to={signupMarket.privacyPath} style={{ color: teal, fontWeight: 600 }}>
+                        Privacy policy
+                      </Link>
+                      .
+                    </span>
+                  </label>
+                  <label
+                    className="login-age-checkbox"
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      marginTop: 10,
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      color: "var(--color-text-secondary)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={confirmAge16}
+                      onChange={(e) => setConfirmAge16(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                      aria-label="I confirm I am 16 or over"
+                    />
+                    <span>I confirm I am 16 or over.</span>
+                  </label>
+                </>
+              )}
               <input
                 type="text"
                 name="company"
@@ -904,6 +941,7 @@ export default function LoginPage() {
                       ? () => {
                           setCreatingAccount(false);
                           setAcceptLegalTerms(false);
+                          setConfirmAge16(false);
                           setMsg("");
                         }
                       : undefined
@@ -919,7 +957,7 @@ export default function LoginPage() {
                 <button
                   type={creatingAccount ? "submit" : "button"}
                   style={{ ...ss.btn, width: "100%" }}
-                  disabled={busy || (creatingAccount && (!acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit))}
+                  disabled={busy || (creatingAccount && (!acceptLegalTerms || !confirmAge16 || signUpThrottle.isThrottled || captchaBlocksSubmit))}
                   onClick={creatingAccount ? undefined : () => { setCreatingAccount(true); setMsg(""); }}
                 >
                   Create account
